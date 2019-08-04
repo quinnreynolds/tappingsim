@@ -46,4 +46,5 @@ class FeMnLadle(BaseModel):
         vdm, vds = self.calc_vdot_out(dt)
         self.volmetal -= vdm * dt
         self.volslag -= vds * dt
+        self.calc_interfaces()
     
