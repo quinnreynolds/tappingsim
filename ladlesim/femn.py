@@ -5,12 +5,12 @@
 import numpy as np
 
 class FeMnLadle():
-    def __init__(self, diameter, height, startvol_slag, startvol_metal):
+    def __init__(self, diameter, height, hmetal_init, hslag_init):
         self.diameter = diameter
         self.height = height
-        self.volmetal = startvol_metal
-        self.volslag = startvol_slag
         self.xarea = 0.25 * np.pi * self.diameter**2
+        self.volmetal = hmetal_init * self.xarea
+        self.volslag = (hslag_init - hmetal_init) * self.xarea
         
     def calc_interfaces(self):
         """Return interface positions (heights) as a function of the current
