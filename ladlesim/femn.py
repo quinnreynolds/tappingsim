@@ -7,7 +7,8 @@ from . import BaseModel
 
 class FeMnLadle(BaseModel):
     def __init__(self, diameter, height, startvol_slag, startvol_metal):
-        BaseModel.__init__(self, diameter, height)
+        self.diameter = diameter
+        self.height = height
         self.volmetal = startvol_metal
         self.volslag = startvol_slag
         self.xarea = 0.25 * np.pi * self.diameter**2
