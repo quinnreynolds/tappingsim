@@ -3,9 +3,8 @@
 # Q Reynolds 2019
 
 import numpy as np
-from . import BaseModel
 
-class FeMnLadle(BaseModel):
+class FeMnLadle():
     def __init__(self, diameter, height, startvol_slag, startvol_metal):
         self.diameter = diameter
         self.height = height
