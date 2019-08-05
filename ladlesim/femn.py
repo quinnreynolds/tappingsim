@@ -36,7 +36,6 @@ class FeMnFurnace():
                0.5*(1+self.kl)*self.densityslag)
         b = (1.75 * rt * (1-self.bedporosity) / 
              (3 * self.particlediameter * self.bedporosity**3))
-        
         if self.hslag < -rt:
             # slag below taphole - no flow
             pa_m = 0
@@ -90,12 +89,11 @@ class FeMnFurnace():
             pa_s = 0
             area_m = 0
             area_s = 0
-            
         umetal = (-b+np.sqrt(b**2 + 4*pa_m*a_m)) / (2*a_m)
         uslag = (-b+np.sqrt(b**2 + 4*pa_s*a_s)) / (2*a_s)
         vdot_metal = area_m * umetal
         vdot_slag = area_s * uslag
-        
+        self.vdotmetal, self.vdotslag = vdot_metal, vdot_slag
         return vdot_metal, vdot_slag
     
     def calc_dt(self, dt, vdot_metal_in, vdot_slag_in):
@@ -153,4 +151,4 @@ class FeMnLadle():
         self.volmetal -= vdm * dt
         self.volslag -= vds * dt
         self.calc_interfaces()
-    
+        return vdm, vds
