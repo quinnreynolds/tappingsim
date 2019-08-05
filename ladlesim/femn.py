@@ -96,15 +96,6 @@ class FeMnFurnace():
         vdot_metal = area_m * umetal
         vdot_slag = area_s * uslag
         
-        self._pmetal = pa_m
-        self._pslag = pa_s
-        self._ametal = area_m
-        self._aslag = area_s        
-        self._umetal = umetal
-        self._uslag = uslag
-        self._vdotmetal = vdot_metal
-        self._vdotslag = vdot_slag
-        
         return vdot_metal, vdot_slag
     
     def calc_dt(self, dt, vdot_metal_in, vdot_slag_in):
@@ -117,7 +108,7 @@ class FeMnFurnace():
         dhslag = -dt * (vds / (self.activearea * self.bedporosity))
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        
+        return vdm, vds
 
 class FeMnLadle():
     def __init__(self, diameter, height, hmetal_init, hslag_init):
