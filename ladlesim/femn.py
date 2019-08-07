@@ -9,7 +9,7 @@ g = 9.81
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
                  densityslag, viscositymetal, viscosityslag, particlediameter, 
-                 bedporosity, hmetal_init, hslag_init):
+                 particlesphericity, bedporosity, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.kl = kl
@@ -20,6 +20,7 @@ class FeMnFurnace():
         self.viscositymetal = viscositymetal
         self.viscosityslag = viscosityslag
         self.particlediameter = particlediameter
+        self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
         self.tapholeopen_yn = False
     
@@ -28,16 +29,17 @@ class FeMnFurnace():
         Simplified model without interface deformation near tap-hole entry.
         """
         rt = 0.5 * self.tapholediameter
+        eff_d = self.particlesphericity * self.particlediameter
         a_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
-               (self.particlediameter**2 * self.bedporosity**3) +
+               (eff_d**2 * self.bedporosity**3) +
                0.5*(1+self.kl)*self.densitymetal)
         a_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
-               (self.particlediameter**2 * self.bedporosity**3) +
+               (eff_d**2 * self.bedporosity**3) +
                0.5*(1+self.kl)*self.densityslag)
         b_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-               (3 * self.particlediameter * self.bedporosity**3))
+               (3 * eff_d * self.bedporosity**3))
         b_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-               (3 * self.particlediameter * self.bedporosity**3))
+               (3 * eff_d * self.bedporosity**3))
         if self.hslag < -rt:
             # slag below taphole - no flow
             pa_m = 0

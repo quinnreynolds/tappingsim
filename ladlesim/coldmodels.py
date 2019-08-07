@@ -10,7 +10,8 @@ g = 9.81
 def vango_parameters():
     return {'tankarea': 0.33*0.15, 'tapholediameter': 0.031, 'kl': 0.5, 
             'densityfluid': 1000, 'viscosityfluid': 0.001, 
-            'particlediameter': 0.0065, 'bedporosity': 0.52, 'bedheight': 0.25,
+            'particlediameter': 0.0065, 'particlesphericity': 0.75, 
+            'bedporosity': 0.52, 'bedheight': 0.25,
             'hfluid_init': 0.3}
     
 def vango_experiment_data():
@@ -18,14 +19,16 @@ def vango_experiment_data():
             'tapped_kg': [2.39, 4.7, 7.06, 8.46, 8.84]}
 
 class TankWithPorousBed():
-    def __init__(self, tankarea, tapholediameter, kl, densityfluid, viscosityfluid, 
-                 particlediameter, bedporosity, bedheight, hfluid_init):
+    def __init__(self, tankarea, tapholediameter, kl, densityfluid, 
+                 viscosityfluid, particlediameter, particlesphericity, 
+                 bedporosity, bedheight, hfluid_init):
         self.tankarea = tankarea
         self.tapholediameter = tapholediameter
         self.kl = kl
         self.densityfluid = densityfluid
         self.viscosityfluid = viscosityfluid
         self.particlediameter = particlediameter
+        self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
         self.bedheight = bedheight
         self.hfluid = hfluid_init
@@ -35,11 +38,12 @@ class TankWithPorousBed():
         Simplified model without interface deformation near tap-hole entry.
         """
         rt = 0.5*self.tapholediameter
+        eff_d = self.particlesphericity * self.particlediameter
         a = (150 * self.viscosityfluid * rt * (1-self.bedporosity)**2 / 
-               (self.particlediameter**2 * self.bedporosity**3) +
+               (eff_d**2 * self.bedporosity**3) +
                0.5*(1+self.kl)*self.densityfluid)
         b = (1.75 * self.densityfluid * rt * (1-self.bedporosity) / 
-               (3 * self.particlediameter * self.bedporosity**3))
+               (3 * eff_d * self.bedporosity**3))
         if self.hfluid < rt:
             # partially filled taphole
             pa = 0.5 * self.hfluid * self.densityfluid * g
