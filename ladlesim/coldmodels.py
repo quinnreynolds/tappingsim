@@ -29,7 +29,7 @@ class TankWithPorousBed():
         self.bedporosity = bedporosity
         self.bedheight = bedheight
         self.hfluid = hfluid_init
-            
+
     def calc_vdot_out(self):
         """Return outlet flowrates as a function of the current tank state. 
         Simplified model without interface deformation near tap-hole entry.
