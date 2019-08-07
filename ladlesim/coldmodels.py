@@ -37,13 +37,13 @@ class TankWithPorousBed():
         rt = 0.5*self.tapholediameter
         a = (150 * self.viscosityfluid * rt * (1-self.bedporosity)**2 / 
                (self.particlediameter**2 * self.bedporosity**3) +
-               0.5*(1+self.kl)*self.densitymetal)
+               0.5*(1+self.kl)*self.densityfluid)
         b = (1.75 * self.densityfluid * rt * (1-self.bedporosity) / 
                (3 * self.particlediameter * self.bedporosity**3))
         if self.hfluid < rt:
             # partially filled taphole
             pa = 0.5 * self.hfluid * self.densityfluid * g
-            theta = 2*np.arccos(1 - (self.hslag + rt)/rt)
+            theta = 2*np.arccos(1 - (self.hfluid + rt)/rt)
             xarea = 0.5*rt**2 * (theta - np.sin(theta)) 
         else:
             pa = (self.hfluid - 0.5*rt) * self.densityfluid * g
