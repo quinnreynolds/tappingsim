@@ -8,7 +8,10 @@ import numpy as np
 g = 9.81
 
 def vango_parameters():
-    return {'tankarea': 0.33*0.15, 'tapholediameter': 0.031, 'kl': 0.5, 
+    """Note effective taphole diameter used because Vango entrance is 
+    rectangular (0.031 x 0.0155). Sphericity estimated from wood chip shapes.
+    """
+    return {'tankarea': 0.33*0.15, 'tapholediameter': 0.035, 'kl': 0.5, 
             'densityfluid': 1000, 'viscosityfluid': 0.001, 
             'particlediameter': 0.0065, 'particlesphericity': 0.75, 
             'bedporosity': 0.52, 'bedheight': 0.25,
@@ -51,7 +54,7 @@ class TankWithPorousBed():
             xarea = 0.5*rt**2 * (theta - np.sin(theta)) 
         else:
             pa = (self.hfluid - 0.5*rt) * self.densityfluid * g
-            xarea = 2*np.pi*rt**2
+            xarea = np.pi*rt**2
         ufluid = (-b + np.sqrt(b**2 + 4*pa*a)) / (2*a)
         vdot = xarea * ufluid
         self.vdot = vdot
