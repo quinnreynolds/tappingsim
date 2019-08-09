@@ -1,25 +1,9 @@
-# Submodule for simulation of tank drainage in various cold-model simulation
-# experiments.
+# Submodule for simulation of various cold-model drainage experiments.
 #
 # Q Reynolds 2019
 
 import numpy as np
-
-g = 9.81
-
-def vango_parameters():
-    """Note effective taphole diameter used because Vango entrance is 
-    rectangular (0.031 x 0.0155). Sphericity estimated from wood chip shapes.
-    """
-    return {'tankarea': 0.33*0.15, 'tapholediameter': 0.035, 'kl': 0.5, 
-            'densityfluid': 1000, 'viscosityfluid': 0.001, 
-            'particlediameter': 0.0065, 'particlesphericity': 0.75, 
-            'bedporosity': 0.52, 'bedheight': 0.25,
-            'hfluid_init': 0.3}
-    
-def vango_experiment_data():
-    return {'time': [7.87, 16.2, 27.8, 41.8, 63.8],
-            'tapped_kg': [2.39, 4.7, 7.06, 8.46, 8.84]}
+from scipy.constants import g
 
 class TankWithPorousBed():
     def __init__(self, tankarea, tapholediameter, kl, densityfluid, 
@@ -43,18 +27,18 @@ class TankWithPorousBed():
         rt = 0.5*self.tapholediameter
         eff_d = self.particlesphericity * self.particlediameter
         a = (150 * self.viscosityfluid * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3) +
-               0.5*(1+self.kl)*self.densityfluid)
+             (eff_d**2 * self.bedporosity**3) +
+             0.5*(1+self.kl)*self.densityfluid)
         b = (1.75 * self.densityfluid * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3))
+             (3 * eff_d * self.bedporosity**3))
         if self.hfluid < rt:
             # partially filled taphole
             pa = 0.5 * self.hfluid * self.densityfluid * g
-            theta = 2*np.arccos(1 - (self.hfluid + rt)/rt)
-            xarea = 0.5*rt**2 * (theta - np.sin(theta)) 
+            theta = 2 * np.arccos(1 - (self.hfluid + rt)/rt)
+            xarea = 0.5 * rt**2 * (theta - np.sin(theta)) 
         else:
             pa = (self.hfluid - 0.5*rt) * self.densityfluid * g
-            xarea = np.pi*rt**2
+            xarea = np.pi * rt**2
         ufluid = (-b + np.sqrt(b**2 + 4*pa*a)) / (2*a)
         vdot = xarea * ufluid
         self.vdot = vdot
@@ -68,3 +52,17 @@ class TankWithPorousBed():
             dhfluid = -dt * (vdf / (self.tankarea * self.bedporosity))
         self.hfluid += dhfluid
         return vdf
+
+def vango_parameters():
+    """Note effective taphole diameter used because Vango entrance is 
+    rectangular (0.031 x 0.0155). Sphericity estimated from wood chip shapes.
+    """
+    return {'tankarea': 0.33*0.15, 'tapholediameter': 0.035, 'kl': 0.5, 
+            'densityfluid': 1000, 'viscosityfluid': 0.001, 
+            'particlediameter': 0.0065, 'particlesphericity': 0.75, 
+            'bedporosity': 0.52, 'bedheight': 0.25,
+            'hfluid_init': 0.3}
+    
+def vango_experiment_data():
+    return {'time': [7.87, 16.2, 27.8, 41.8, 63.8],
+            'tapped_kg': [2.39, 4.7, 7.06, 8.46, 8.84]}

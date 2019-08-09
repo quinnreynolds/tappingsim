@@ -3,8 +3,7 @@
 # Q Reynolds 2019
 
 import numpy as np
-
-g = 9.81
+from scipy.constants import g
 
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
@@ -46,10 +45,10 @@ class FeMnFurnace():
         # undeformed interfaces). Integrated pressure field in z, averaged with 
         # total height in taphole.
         if self.hslag < -rt:
-            # slag below taphole - no flow
+            # liquid level below taphole - no flow
             pa = 0
         elif self.hslag < rt:
-            #taphole partially filled
+            # liquid level between taphole limits
             if self.hmetal < -rt:
                 # slag only
                 pa = 0.5 * (self.hslag + rt) * self.densityslag * g
@@ -59,7 +58,7 @@ class FeMnFurnace():
                             self.densityslag*(self.hslag*(self.hslag+2*rt) - 
                             self.hmetal*(self.hmetal+2*rt))) / (self.hslag+rt)
         else:
-            # taphole completely filled
+            # liquid level above taphole
             if self.hmetal < -rt:
                 # slag only
                 pa = self.hslag * self.densityslag * g
@@ -86,7 +85,7 @@ class FeMnFurnace():
             area_m = 0
             area_s = 0
         elif self.hslag < rt:
-            #taphole partially filled
+            # taphole partially filled
             if self.hmetal < h0_l:
                 # slag only
                 theta = 2*np.arccos(-self.hslag/rt)
@@ -139,9 +138,9 @@ class FeMnFurnace():
         return vdm, vds
 
 class FeMnLadle():
-    def __init__(self, diameter, height, hmetal_init, hslag_init):
+    def __init__(self, diameter, depth, hmetal_init, hslag_init):
         self.diameter = diameter
-        self.height = height
+        self.depth = depth
         self.xarea = 0.25 * np.pi * self.diameter**2
         self.volmetal = hmetal_init * self.xarea
         self.volslag = (hslag_init - hmetal_init) * self.xarea
@@ -161,16 +160,16 @@ class FeMnLadle():
         the ladle outlet.
         """
         hmi, hsi = self.calc_interfaces()
-        if hsi < self.height:
+        if hsi < self.depth:
             vdot_slag = 0
             vdot_metal = 0
         else:
-            if hmi < self.height:
-                vdot_slag = (hsi - self.height) * self.xarea / dt
+            if hmi < self.depth:
+                vdot_slag = (hsi - self.depth) * self.xarea / dt
                 vdot_metal = 0
             else:
                 vdot_slag = (hsi - hmi) * self.xarea / dt
-                vdot_metal = (hmi - self.height) * self.xarea / dt
+                vdot_metal = (hmi - self.depth) * self.xarea / dt
         self.vdotmetal, self.vdotslag = vdot_metal, vdot_slag
         return vdot_metal, vdot_slag
     
