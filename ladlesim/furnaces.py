@@ -4,6 +4,7 @@
 
 import numpy as np
 from scipy.constants import g, pi
+power_time_factor = 1000/3600
 
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
@@ -26,7 +27,11 @@ class FeMnFurnace():
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
         self.tapholeopen_yn = False
+        self.powertotaliserkWh = 0
     
+    def reset_powertotaliser(self):
+        self.powertotaliserkWh = 0
+        
     def calc_vdot_out(self):
         """Return outlet flowrates as a function of the current furnace state. 
         Extended model with semi-empirical interface deformation near tap-hole 
@@ -130,9 +135,9 @@ class FeMnFurnace():
         return vdot_metal, vdot_slag
     
     def calc_dt(self, dt):
-        mdot_metal_in = (1000/3600) * self.powerMW / self.metalSER
-        vdot_metal_in = mdot_metal_in/self.densitymetal
-        vdot_slag_in = mdot_metal_in*self.slagmetalmassratio/self.densitymetal
+        mdot_metal_in = power_time_factor * self.powerMW / self.metalSER
+        vdot_metal_in = mdot_metal_in / self.densitymetal
+        vdot_slag_in = mdot_metal_in*self.slagmetalmassratio / self.densityslag
         dhmetal = dt * vdot_metal_in / (self.activearea * self.bedporosity)
         dhslag = dt * vdot_slag_in / (self.activearea * self.bedporosity)
         self.hmetal += dhmetal
@@ -142,4 +147,4 @@ class FeMnFurnace():
         dhslag = -dt * (vds / (self.activearea * self.bedporosity))
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        return vdm, vds
+        self.powertotaliserkWh += power_time_factor * dt * self.powerMW
