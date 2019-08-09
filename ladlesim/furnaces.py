@@ -130,7 +130,7 @@ class FeMnFurnace():
         return vdot_metal, vdot_slag
     
     def calc_dt(self, dt):
-        mdot_metal_in = (1000/3600) * self.power / self.metalSER
+        mdot_metal_in = (1000/3600) * self.powerMW / self.metalSER
         vdot_metal_in = mdot_metal_in/self.densitymetal
         vdot_slag_in = mdot_metal_in*self.slagmetalmassratio/self.densitymetal
         dhmetal = dt * vdot_metal_in / (self.activearea * self.bedporosity)
