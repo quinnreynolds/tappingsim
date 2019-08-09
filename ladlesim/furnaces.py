@@ -8,7 +8,8 @@ from scipy.constants import g, pi
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
                  densityslag, viscositymetal, viscosityslag, particlediameter, 
-                 particlesphericity, bedporosity, hmetal_init, hslag_init):
+                 particlesphericity, bedporosity, powerMW, metalSER, 
+                 slagmetalmassratio, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.kl = kl
@@ -21,6 +22,9 @@ class FeMnFurnace():
         self.particlediameter = particlediameter
         self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
+        self.powerMW = powerMW
+        self.metalSER = metalSER
+        self.slagmetalmassratio = slagmetalmassratio
         self.tapholeopen_yn = False
     
     def calc_vdot_out(self):
@@ -125,7 +129,10 @@ class FeMnFurnace():
         self.vdotmetal, self.vdotslag = vdot_metal, vdot_slag
         return vdot_metal, vdot_slag
     
-    def calc_dt(self, dt, vdot_metal_in, vdot_slag_in):
+    def calc_dt(self, dt):
+        mdot_metal_in = (1000/3600) * self.power / self.metalSER
+        vdot_metal_in = mdot_metal_in/self.densitymetal
+        vdot_slag_in = mdot_metal_in*self.slagmetalmassratio/self.densitymetal
         dhmetal = dt * vdot_metal_in / (self.activearea * self.bedporosity)
         dhslag = dt * vdot_slag_in / (self.activearea * self.bedporosity)
         self.hmetal += dhmetal
