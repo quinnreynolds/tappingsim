@@ -2,8 +2,7 @@
 #
 # Q Reynolds 2019
 
-import numpy as np
-from scipy.constants import g, pi
+from scipy.constants import pi
 
 class FeMnLadle():
     def __init__(self, diameter, depth, hmetal_init, hslag_init):
@@ -48,4 +47,3 @@ class FeMnLadle():
         self.volmetal -= vdm * dt
         self.volslag -= vds * dt
         self.calc_interfaces()
-        return vdm, vds
