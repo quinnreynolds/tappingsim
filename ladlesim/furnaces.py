@@ -27,11 +27,23 @@ class FeMnFurnace():
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
         self.tapholeopen_yn = False
+        self.timetotaliser = 0
         self.powertotaliserkWh = 0
+        self.tapmasstotaliser = 0
+        self.tapvolumetotaliser = 0
     
-    def reset_powertotaliser(self):
+    def reset_time_totaliser(self):
         self.powertotaliserkWh = 0
         
+    def reset_power_totaliser(self):
+        self.powertotaliserkWh = 0
+        
+    def reset_mass_totaliser(self):
+        self.tapmasstotaliser = 0
+
+    def reset_volume_totaliser(self):
+        self.tapvolumetotaliser = 0
+
     def calc_vdot_out(self):
         """Return outlet flowrates as a function of the current furnace state. 
         Extended model with semi-empirical interface deformation near tap-hole 
@@ -129,22 +141,26 @@ class FeMnFurnace():
             area_m = 0
             area_s = 0
 
-        vdot_metal = area_m * umetal
-        vdot_slag = area_s * uslag
-        self.vdotmetal, self.vdotslag = vdot_metal, vdot_slag
-        return vdot_metal, vdot_slag
+        vdotmetal = area_m * umetal
+        vdotslag = area_s * uslag
+        self.vdotmetal_out, self.vdotslag_out = vdotmetal, vdotslag
     
     def calc_dt(self, dt):
-        mdot_metal_in = power_time_factor * self.powerMW / self.metalSER
-        vdot_metal_in = mdot_metal_in / self.densitymetal
-        vdot_slag_in = mdot_metal_in*self.slagmetalmassratio / self.densityslag
-        dhmetal = dt * vdot_metal_in / (self.activearea * self.bedporosity)
-        dhslag = dt * vdot_slag_in / (self.activearea * self.bedporosity)
+        mdotmetal_in = power_time_factor * self.powerMW / self.metalSER
+        vdotmetal_in = mdotmetal_in / self.densitymetal
+        vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
+        dhmetal = dt * vdotmetal_in / (self.activearea * self.bedporosity)
+        dhslag = dt * vdotslag_in / (self.activearea * self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        vdm, vds = self.calc_vdot_out()
-        dhmetal = -dt * (vdm / (self.activearea * self.bedporosity))
-        dhslag = -dt * (vds / (self.activearea * self.bedporosity))
+        self.calc_vdot_out()
+        dhmetal = -dt*self.vdotmetal_out / (self.activearea*self.bedporosity)
+        dhslag = -dt*self.vdotslag_out / (self.activearea*self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
+        
+        self.timetotaliser += dt
         self.powertotaliserkWh += power_time_factor * dt * self.powerMW
+        self.tapmasstotaliser += dt * (self.vdotmetal_out * self.densitymetal + 
+                                       self.vdotslag_out * self.densityslag)
+        self.tapvolumetotaliser += dt * (self.vdotmetal_out + self.vdotslag_out)
