@@ -3,7 +3,7 @@
 # Q Reynolds 2019
 
 import numpy as np
-from scipy.constants import g
+from scipy.constants import g, pi
 
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
@@ -88,33 +88,33 @@ class FeMnFurnace():
             # taphole partially filled
             if self.hmetal < h0_l:
                 # slag only
-                theta = 2*np.arccos(-self.hslag/rt)
+                theta = 2 * np.arccos(-self.hslag/rt)
                 area_m = 0
-                area_s = 0.5*rt**2*(theta - np.sin(theta))
+                area_s = 0.5 * rt**2 * (theta - np.sin(theta))
             else:
                 # slag and metal
                 hi = self.hslag - ((self.hslag-self.hmetal) * (self.hslag+rt) / 
                                    (self.hslag-h0_l))
                 theta = 2*np.arccos(-hi/rt)
-                area_m = 0.5*rt**2*(theta - np.sin(theta))
+                area_m = 0.5 * rt**2 * (theta - np.sin(theta))
                 theta = 2*np.arccos(-self.hslag/rt)
-                area_s = 0.5*rt**2*(theta - np.sin(theta)) - area_m
+                area_s = 0.5 * rt**2 * (theta - np.sin(theta)) - area_m
         else:
             # taphole completely filled
             if self.hmetal < h0_l:
                 # slag only
                 area_m = 0
-                area_s = np.pi*rt**2
+                area_s = pi * rt**2
             elif self.hmetal > h0_h:
                 # metal only
-                area_m = np.pi*rt**2
+                area_m = pi * rt**2
                 area_s = 0
             else:
                 # slag and metal
-                hi = rt*(1 - 2*(h0_h-self.hmetal)/(h0_h-h0_l))
-                theta = 2*np.arccos(-hi/rt)
-                area_m = 0.5*rt**2*(theta - np.sin(theta))
-                area_s = np.pi*rt**2 - area_m
+                hi = rt * (1 - 2 * (h0_h-self.hmetal) / (h0_h-h0_l))
+                theta = 2 * np.arccos(-hi/rt)
+                area_m = 0.5 * rt**2 * (theta - np.sin(theta))
+                area_s = pi * rt**2 - area_m
                 
         if not self.tapholeopen_yn:
             area_m = 0
@@ -135,49 +135,4 @@ class FeMnFurnace():
         dhslag = -dt * (vds / (self.activearea * self.bedporosity))
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        return vdm, vds
-
-class FeMnLadle():
-    def __init__(self, diameter, depth, hmetal_init, hslag_init):
-        self.diameter = diameter
-        self.depth = depth
-        self.xarea = 0.25 * np.pi * self.diameter**2
-        self.volmetal = hmetal_init * self.xarea
-        self.volslag = (hslag_init - hmetal_init) * self.xarea
-        
-    def calc_interfaces(self):
-        """Return interface positions (heights) as a function of the current
-        ladle state.
-        """
-        hmi = self.volmetal / self.xarea
-        hsi = hmi + self.volslag / self.xarea
-        self.hmetal, self.hslag = hmi, hsi
-        return hmi, hsi
-    
-    def calc_vdot_out(self, dt):
-        """Return outlet flowrates as a function of the current ladle state.
-        Simplified model with no carry-over of metal until the interface reaches
-        the ladle outlet.
-        """
-        hmi, hsi = self.calc_interfaces()
-        if hsi < self.depth:
-            vdot_slag = 0
-            vdot_metal = 0
-        else:
-            if hmi < self.depth:
-                vdot_slag = (hsi - self.depth) * self.xarea / dt
-                vdot_metal = 0
-            else:
-                vdot_slag = (hsi - hmi) * self.xarea / dt
-                vdot_metal = (hmi - self.depth) * self.xarea / dt
-        self.vdotmetal, self.vdotslag = vdot_metal, vdot_slag
-        return vdot_metal, vdot_slag
-    
-    def calc_dt(self, dt, vdot_metal_in, vdot_slag_in):
-        self.volmetal += vdot_metal_in * dt
-        self.volslag += vdot_slag_in * dt
-        vdm, vds = self.calc_vdot_out(dt)
-        self.volmetal -= vdm * dt
-        self.volslag -= vds * dt
-        self.calc_interfaces()
         return vdm, vds

@@ -3,13 +3,13 @@
 # Q Reynolds 2019
 
 import numpy as np
-from scipy.constants import g
+from scipy.constants import g, pi
 
 class FeMnLadle():
     def __init__(self, diameter, depth, hmetal_init, hslag_init):
         self.diameter = diameter
         self.depth = depth
-        self.xarea = 0.25 * np.pi * self.diameter**2
+        self.xarea = 0.25 * pi * self.diameter**2
         self.volmetal = hmetal_init * self.xarea
         self.volslag = (hslag_init - hmetal_init) * self.xarea
         

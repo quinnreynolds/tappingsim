@@ -3,14 +3,15 @@
 # Q Reynolds 2019
 
 import numpy as np
-from scipy.constants import g
+from scipy.constants import g, pi
 
 class TankWithPorousBed():
-    def __init__(self, tankarea, tapholediameter, kl, densityfluid, 
+    def __init__(self, tankarea, tapholewidth, tapholeheight, kl, densityfluid, 
                  viscosityfluid, particlediameter, particlesphericity, 
                  bedporosity, bedheight, hfluid_init):
-        self.tankarea = tankarea
-        self.tapholediameter = tapholediameter
+        self.tapholeheight = tapholeheight
+        self.tapholewidth = tapholewidth
+        self.tapholewidth = tapholewidth
         self.kl = kl
         self.densityfluid = densityfluid
         self.viscosityfluid = viscosityfluid
@@ -24,21 +25,20 @@ class TankWithPorousBed():
         """Return outlet flowrates as a function of the current tank state. 
         Simplified model without interface deformation near tap-hole entry.
         """
-        rt = 0.5*self.tapholediameter
+        rt = np.sqrt(self.tapholewidth * self.tapholeheight / pi)
         eff_d = self.particlesphericity * self.particlediameter
         a = (150 * self.viscosityfluid * rt * (1-self.bedporosity)**2 / 
              (eff_d**2 * self.bedporosity**3) +
              0.5*(1+self.kl)*self.densityfluid)
         b = (1.75 * self.densityfluid * rt * (1-self.bedporosity) / 
              (3 * eff_d * self.bedporosity**3))
-        if self.hfluid < rt:
+        if self.hfluid < self.tapholeheight:
             # partially filled taphole
             pa = 0.5 * self.hfluid * self.densityfluid * g
-            theta = 2 * np.arccos(1 - (self.hfluid + rt)/rt)
-            xarea = 0.5 * rt**2 * (theta - np.sin(theta)) 
+            xarea = self.hfluid * self.tapholewidth 
         else:
             pa = (self.hfluid - 0.5*rt) * self.densityfluid * g
-            xarea = np.pi * rt**2
+            xarea = self.tapholeheight * self.tapholewidth
         ufluid = (-b + np.sqrt(b**2 + 4*pa*a)) / (2*a)
         vdot = xarea * ufluid
         self.vdot = vdot
@@ -54,13 +54,10 @@ class TankWithPorousBed():
         return vdf
 
 def vango_parameters():
-    """Note effective taphole diameter used because Vango entrance is 
-    rectangular (0.031 x 0.0155). Sphericity estimated from wood chip shapes.
-    """
-    return {'tankarea': 0.33*0.15, 'tapholediameter': 0.035, 'kl': 0.5, 
-            'densityfluid': 1000, 'viscosityfluid': 0.001, 
-            'particlediameter': 0.0065, 'particlesphericity': 0.75, 
-            'bedporosity': 0.52, 'bedheight': 0.25,
+    return {'tankarea': 0.33*0.15, 'tapholewidth': 0.031, 
+            'tapholeheight': 0.0155, 'kl': 0.5, 'densityfluid': 1000, 
+            'viscosityfluid': 0.001, 'particlediameter': 0.0065, 
+            'particlesphericity': 0.75, 'bedporosity': 0.52, 'bedheight': 0.25,
             'hfluid_init': 0.3}
     
 def vango_experiment_data():
