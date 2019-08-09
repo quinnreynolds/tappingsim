@@ -33,7 +33,7 @@ class FeMnFurnace():
         self.tapvolumetotaliser = 0
     
     def reset_time_totaliser(self):
-        self.powertotaliserkWh = 0
+        self.timetotaliser = 0
         
     def reset_power_totaliser(self):
         self.powertotaliserkWh = 0
