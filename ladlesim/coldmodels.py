@@ -9,8 +9,8 @@ class TankWithPorousBed():
     def __init__(self, tankarea, tapholewidth, tapholeheight, kl, densityfluid, 
                  viscosityfluid, particlediameter, particlesphericity, 
                  bedporosity, bedheight, hfluid_init):
+        self.tankarea = tankarea
         self.tapholeheight = tapholeheight
-        self.tapholewidth = tapholewidth
         self.tapholewidth = tapholewidth
         self.kl = kl
         self.densityfluid = densityfluid
