@@ -135,14 +135,13 @@ class FeMnFurnace():
                 hi = rt * (1 - 2 * (h0_h-self.hmetal) / (h0_h-h0_l))
                 theta = 2 * np.arccos(-hi/rt)
                 area_m = 0.5 * rt**2 * (theta - np.sin(theta))
-                area_s = pi * rt**2 - area_m
-                
-        if not self.tapholeopen_yn:
-            area_m = 0
-            area_s = 0
-
+                area_s = pi * rt**2 - area_m                
         vdotmetal = area_m * umetal
         vdotslag = area_s * uslag
+
+        if not self.tapholeopen_yn:
+            vdotmetal, vdotslag = 0, 0
+
         self.vdotmetal_out, self.vdotslag_out = vdotmetal, vdotslag
     
     def calc_dt(self, dt):
