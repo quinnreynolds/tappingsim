@@ -51,16 +51,16 @@ class FeMnFurnace():
         """
         rt = 0.5 * self.tapholediameter
         eff_d = self.particlesphericity * self.particlediameter
-        a_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3) +
+        a_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
+               (3 * eff_d * self.bedporosity**3) +
                0.5*(1+self.kl)*self.densitymetal)
-        a_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3) +
+        a_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
+               (3 * eff_d * self.bedporosity**3) +
                0.5*(1+self.kl)*self.densityslag)
-        b_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3))
-        b_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3))
+        b_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
+               (eff_d**2 * self.bedporosity**3))
+        b_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
+               (eff_d**2 * self.bedporosity**3))
         
         # tapping pressure calculation (applied to both phases, based on 
         # undeformed interfaces). Integrated pressure field in z, averaged with 
