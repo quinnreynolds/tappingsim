@@ -9,8 +9,8 @@ power_time_factor = 1000/3600
 class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, kl, densitymetal, 
                  densityslag, viscositymetal, viscosityslag, particlediameter, 
-                 particlesphericity, bedporosity, powerMW, metalSER, 
-                 slagmetalmassratio, hmetal_init, hslag_init):
+                 particlesphericity, bedporosity, bedmaxradius, powerMW, 
+                 metalSER, slagmetalmassratio, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.kl = kl
@@ -23,6 +23,7 @@ class FeMnFurnace():
         self.particlediameter = particlediameter
         self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
+        self.bedmaxradius = bedmaxradius
         self.powerMW = powerMW
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
@@ -50,17 +51,18 @@ class FeMnFurnace():
         entry.
         """
         rt = 0.5 * self.tapholediameter
+        relrad = rt / self.bedmaxradius
         eff_d = self.particlesphericity * self.particlediameter
         a_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3) +
+               (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
                0.5*(1+self.kl)*self.densitymetal)
         a_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3) +
+               (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
                0.5*(1+self.kl)*self.densityslag)
         b_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3))
+               (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
         b_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3))
+               (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
         
         # tapping pressure calculation (applied to both phases, based on 
         # undeformed interfaces). Integrated pressure field in z, averaged with 
