@@ -30,11 +30,18 @@ class FeMnFurnace():
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
         self.tapholeopen_yn = False
+        self.allownegativeheights_yn = False
         self.timetotaliser = 0
         self.powertotaliserkWh = 0
         self.tapmasstotaliser = 0
         self.tapvolumetotaliser = 0
     
+    def toggle_tapholeopen(self):
+        self.tapholeopen_yn = not self.tapholeopen_yn
+        
+    def toggle_allownegativeheights(self):
+        self.allownegativeheights_yn = not self.allownegativeheights_yn
+
     def reset_time_totaliser(self):
         self.timetotaliser = 0
         
@@ -142,10 +149,11 @@ class FeMnFurnace():
         vdotmetal = area_m * umetal
         vdotslag = area_s * uslag
         
-        if self.hslag <= 0:
-            vdotslag = 0
-        if self.hmetal <= 0:
-            vdotmetal = 0
+        if not self.allownegativeheights_yn:
+            if self.hslag <= 0:
+                vdotslag = 0
+            if self.hmetal <= 0:
+                vdotmetal = 0
         if not self.tapholeopen_yn:
             vdotmetal, vdotslag = 0, 0
 
