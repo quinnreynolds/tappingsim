@@ -10,7 +10,7 @@ class FeMnFurnace():
     def __init__(self, activearea, tapholediameter, tapholeheight, kl, 
                  densitymetal, densityslag, viscositymetal, viscosityslag, 
                  particlediameter, particlesphericity, bedporosity, 
-                 bedmaxradius, powerMW, metalSER, slagmetalmassratio, 
+                 bedmaxradius, bedmodel, powerMW, metalSER, slagmetalmassratio, 
                  hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
@@ -26,6 +26,7 @@ class FeMnFurnace():
         self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
         self.bedmaxradius = bedmaxradius
+        self.bedmodel = bedmodel
         self.powerMW = powerMW
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
@@ -62,17 +63,29 @@ class FeMnFurnace():
         rt = 0.5 * self.tapholediameter
         relrad = rt / self.bedmaxradius
         eff_d = self.particlesphericity * self.particlediameter
-        a_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
-               0.5*(1+self.kl)*self.densitymetal)
-        a_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-               (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
-               0.5*(1+self.kl)*self.densityslag)
-        b_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
-        b_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
-               (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
-        
+        if self.bedmodel == 'ergun':
+            a_m = (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
+                   (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
+                   0.5*(1+self.kl)*self.densitymetal)
+            a_s = (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
+                   (3 * eff_d * self.bedporosity**3) * (1 - 0.25 * relrad**3) +
+                   0.5*(1+self.kl)*self.densityslag)
+            b_m = (150 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
+                   (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+            b_s = (150 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
+                   (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+        elif self.bedmodel == 'carmenkozeny':
+            a_m = 0.5*(1+self.kl)*self.densitymetal
+            a_s = 0.5*(1+self.kl)*self.densityslag
+            b_m = (180 * self.viscositymetal * rt * (1-self.bedporosity)**2 / 
+                   (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+            b_s = (180 * self.viscosityslag * rt * (1-self.bedporosity)**2 / 
+                   (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+        else:
+            raise NotImplementedError('Bed model ' + str(self.bedmodel) + 
+                                      ' not implemented. Please use one of '
+                                      '"ergun" or "carmenkozeny"')
+            
         # tapping pressure calculation (applied to both phases, based on 
         # undeformed interfaces). Integrated pressure field in z, averaged with 
         # total height in taphole.
