@@ -4,13 +4,13 @@
 
 from scipy.constants import pi
 
-class FeMnLadle():
+class CylindricalLadle():
     def __init__(self, diameter, depth, hmetal_init, hslag_init):
         self.diameter = diameter
         self.depth = depth
-        self.xarea = 0.25 * pi * self.diameter**2
         self.hmetal = hmetal_init
         self.hslag = hslag_init
+        self.xarea = 0.25 * pi * self.diameter**2
         
     def empty_ladle(self):
         self.hmetal, self.hslag = 0, 0

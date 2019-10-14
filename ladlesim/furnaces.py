@@ -6,12 +6,12 @@ import numpy as np
 from scipy.constants import g, pi
 power_time_factor = 1000/3600
 
-class FeMnFurnace():
+class SubmergedArcFurnace():
     def __init__(self, activearea, tapholediameter, tapholeheight, kl, 
                  densitymetal, densityslag, viscositymetal, viscosityslag, 
                  particlediameter, particlesphericity, bedporosity, 
-                 bedmaxradius, bedmodel, powerMW, metalSER, slagmetalmassratio, 
-                 hmetal_init, hslag_init):
+                 bedmaxradius, bedmodel, bedentryzone_yn, powerMW, metalSER, 
+                 slagmetalmassratio, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.tapholeheight = tapholeheight
@@ -27,6 +27,7 @@ class FeMnFurnace():
         self.bedporosity = bedporosity
         self.bedmaxradius = bedmaxradius
         self.bedmodel = bedmodel
+        self.bedentryzone_yn = bedentryzone_yn
         self.powerMW = powerMW
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
@@ -169,7 +170,7 @@ class FeMnFurnace():
                 vdotmetal = 0
         if not self.tapholeopen_yn:
             vdotmetal, vdotslag = 0, 0
-
+        
         self.vdotmetal_out, self.vdotslag_out = vdotmetal, vdotslag
     
     def calc_dt(self, dt):

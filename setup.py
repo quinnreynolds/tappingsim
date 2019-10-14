@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='ladlesim',
-      version='0.2',
+      version='0.3',
       description="""Simple mass-balance simulator for tapping ladle filling""",
       url='https://kittychunk@bitbucket.org/kittychunk/ladlesim.git',
       author='Quinn Reynolds',
