@@ -1,5 +1,12 @@
 # Ladle simulator, base module information
 #
-# Q Reynolds 2019
+# Authors: 
+#  Quinn Reynolds (Pyrometallurgy Division, Mintek)
+#  Jan Erik Olsen (Flow Technology, SINTEF Industri)
 
 __version__ = 0.3
+
+from . import cite
+from . import coldmodels
+from . import furnaces
+from . import ladles

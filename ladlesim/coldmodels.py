@@ -1,7 +1,3 @@
-# Submodule for simulation of various cold-model drainage experiments.
-#
-# Q Reynolds 2019
-
 import numpy as np
 from scipy.constants import g, pi
 

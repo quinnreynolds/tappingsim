@@ -1,7 +1,3 @@
-# Submodule for simulation of FeMn ladle filling.
-#
-# Q Reynolds 2019
-
 from scipy.constants import pi
 
 class CylindricalLadle():

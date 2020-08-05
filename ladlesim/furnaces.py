@@ -1,7 +1,3 @@
-# Submodule for simulation of FeMn ladle filling.
-#
-# Q Reynolds 2019
-
 import numpy as np
 from scipy.constants import g, pi
 power_time_factor = 1000/3600
