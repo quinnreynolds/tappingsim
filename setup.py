@@ -1,9 +1,10 @@
 from setuptools import setup
+from ladlesim import __version__
 
 setup(name='ladlesim',
-      version='0.3',
-      description="""Simple mass-balance simulator for tapping ladle filling""",
-      url='https://kittychunk@bitbucket.org/kittychunk/ladlesim.git',
+      version=__version__,
+      description="""Semi-empirical simulator for furnace tapping systems""",
+      url='https://github.com/quinnreynolds/ladlesim',
       author='Quinn Reynolds',
       author_email='quinnr@mintek.co.za',
       license='Proprietary',
