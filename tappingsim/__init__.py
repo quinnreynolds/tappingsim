@@ -1,4 +1,4 @@
-# Ladle simulator, base module information
+# Furnace tapping simulator, base module information
 #
 # Authors: 
 #  Quinn Reynolds (Pyrometallurgy Division, Mintek)
