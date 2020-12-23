@@ -204,6 +204,7 @@ class SubmergedArcFurnace():
             vdotmetal, vdotslag = 0, 0
         
         self.vdotmetal_out, self.vdotslag_out = vdotmetal, vdotslag
+        self.umetal_out, self.uslag_out = umetal, uslag
     
     def calc_dt(self, dt):
         mdotmetal_in = POWER_TIME_FACTOR * self.powerMW / self.metalSER
