@@ -14,12 +14,12 @@ def frictionfactor_darcy(diameter, roughness, velocity, density, viscosity):
 
 
 class SubmergedArcFurnace():
-    def __init__(self, powerMW, metalSER, slagmetalmassratio, activearea, 
-                 tapholediameter, tapholelength, tapholeheight, densitymetal, 
-                 densityslag, viscositymetal, viscosityslag, particlediameter, 
-                 particlesphericity, bedporosity, bedmindiameter, 
-                 bedmaxdiameter, bedmodel, entrykl, channelfdslag, 
-                 channelfdmetal, hmetal_init, hslag_init):
+    def __init__(self, powerMVA, powerfactor, metalSER, slagmetalmassratio, 
+                 activearea, tapholediameter, tapholelength, tapholeheight, 
+                 densitymetal, densityslag, viscositymetal, viscosityslag, 
+                 particlediameter, particlesphericity, bedporosity, 
+                 bedmindiameter, bedmaxdiameter, bedmodel, entrykl, 
+                 channelfdslag, channelfdmetal, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.tapholelength = tapholelength
@@ -37,7 +37,8 @@ class SubmergedArcFurnace():
         self.entrykl = entrykl
         self.channelfdslag = channelfdslag
         self.channelfdmetal = channelfdmetal
-        self.powerMW = powerMW
+        self.powerMVA = powerMVA
+        self.powerfactor = powerfactor
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
         self.hmetal = hmetal_init
@@ -213,7 +214,8 @@ class SubmergedArcFurnace():
         self.umetal_out, self.uslag_out = umetal, uslag
     
     def calc_dt(self, dt):
-        mdotmetal_in = POWER_TIME_FACTOR * self.powerMW / self.metalSER
+        mdotmetal_in = (POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
+                        / self.metalSER)
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         dhmetal = dt * vdotmetal_in / (self.activearea * self.bedporosity)
@@ -227,7 +229,8 @@ class SubmergedArcFurnace():
         self.hslag += dhmetal + dhslag
         
         self.timetotaliser += dt
-        self.powertotaliserkWh += POWER_TIME_FACTOR * dt * self.powerMW
+        self.powertotaliserkWh += (POWER_TIME_FACTOR * dt * self.powerMVA 
+                                   * self.powerfactor)
         self.tapmasstotaliser += dt * (self.vdotmetal_out * self.densitymetal + 
                                        self.vdotslag_out * self.densityslag)
         self.tapvolumetotaliser += dt * (self.vdotmetal_out + self.vdotslag_out)
