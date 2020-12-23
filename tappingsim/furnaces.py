@@ -17,9 +17,9 @@ class SubmergedArcFurnace():
     def __init__(self, powerMW, metalSER, slagmetalmassratio, activearea, 
                  tapholediameter, tapholelength, tapholeheight, densitymetal, 
                  densityslag, viscositymetal, viscosityslag, particlediameter, 
-                 particlesphericity, bedporosity, bedmaxradius, bedmodel, 
-                 entrykl, channelfdslag, channelfdmetal, bedentryzone_yn, 
-                 channellosses_yn, hmetal_init, hslag_init):
+                 particlesphericity, bedporosity, bedmindiameter, 
+                 bedmaxdiameter, bedmodel, entrykl, channelfdslag, 
+                 channelfdmetal, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.tapholelength = tapholelength
@@ -31,20 +31,19 @@ class SubmergedArcFurnace():
         self.particlediameter = particlediameter
         self.particlesphericity = particlesphericity
         self.bedporosity = bedporosity
-        self.bedmaxradius = bedmaxradius
+        self.bedmindiameter = bedmindiameter
+        self.bedmaxdiameter = bedmaxdiameter
         self.bedmodel = bedmodel
         self.entrykl = entrykl
         self.channelfdslag = channelfdslag
         self.channelfdmetal = channelfdmetal
-        self.bedentryzone_yn = bedentryzone_yn
-        self.channellosses_yn = channellosses_yn
         self.powerMW = powerMW
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
         self.hmetal = hmetal_init
         self.hslag = hslag_init
-        self.tapholeopen_yn = False
         self.allownegativeheights_yn = False
+        self.tapholeopen_yn = False
         self.timetotaliser = 0
         self.powertotaliserkWh = 0
         self.tapmasstotaliser = 0
@@ -74,47 +73,53 @@ class SubmergedArcFurnace():
         entry.
         """
         rt = 0.5 * self.tapholediameter
-        relrad = rt / self.bedmaxradius
+        rmin, rmax = 0.5 * self.bedmindiameter, 0.5 * self.bedmaxdiameter
         eff_d = self.particlesphericity * self.particlediameter
-        a_m = 0.5*(1+self.entrykl)*self.densitymetal
-        a_s = 0.5*(1+self.entrykl)*self.densityslag        
-        if self.channellosses_yn:
-            a_m += (0.5*self.densitymetal*self.channelfdmetal
-                    * self.tapholelength/self.tapholediameter)
-            a_s += (0.5*self.densityslag*self.channelfdslag
-                    * self.tapholelength/self.tapholediameter)
-            
+        a_m = (0.5*(1+self.entrykl)*self.densitymetal
+               + 0.5*self.densitymetal*self.channelfdmetal
+               * self.tapholelength/self.tapholediameter)
+        a_s = (0.5*(1+self.entrykl)*self.densityslag
+               + 0.5*self.densityslag*self.channelfdslag
+               * self.tapholelength/self.tapholediameter)
+        
         # Bernoulli coefficient calculation
+        rrmax = rt / rmax
         if self.bedmodel == 'ergun':
-            if self.bedentryzone_yn:
+            if rmin > rt:
+                rrmin = rt / rmin
                 a_m += (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-                        (3*eff_d*self.bedporosity**3) * (1 - 0.25 * relrad**3))
+                        (12*eff_d*self.bedporosity**3) * (rrmin**3 - rrmax**3))
                 a_s += (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-                        (3*eff_d*self.bedporosity**3) * (1 - 0.25 * relrad**3))
+                        (12*eff_d*self.bedporosity**3) * (rrmin**3 - rrmax**3))
                 b_m = (150*self.viscositymetal*rt*(1-self.bedporosity)**2 / 
-                       (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (rrmin - rrmax))
                 b_s = (150*self.viscosityslag*rt*(1-self.bedporosity)**2 / 
-                       (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (rrmin - rrmax))
             else:
+                rrmin = rmin / rt
                 a_m += (1.75 * self.densitymetal * rt * (1-self.bedporosity) / 
-                        (12*eff_d*self.bedporosity**3) * (1 - relrad**3))
+                        (12*eff_d*self.bedporosity**3) * (4 - 3*rrmin**3 
+                                                          - rrmax**3))
                 a_s += (1.75 * self.densityslag * rt * (1-self.bedporosity) / 
-                       (12*eff_d*self.bedporosity**3) * (1 - relrad**3))
+                        (12*eff_d*self.bedporosity**3) * (4 - 3*rrmin**3 
+                                                          - rrmax**3))
                 b_m = (150*self.viscositymetal*rt*(1-self.bedporosity)**2 / 
-                       (2*eff_d**2 * self.bedporosity**3) * (1 - relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (2 - rrmin - rrmax))
                 b_s = (150*self.viscosityslag*rt*(1-self.bedporosity)**2 / 
-                       (2*eff_d**2 * self.bedporosity**3) * (1 - relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (2 - rrmin - rrmax))
         elif self.bedmodel == 'carmenkozeny':
-            if self.bedentryzone_yn:
+            if rmin > rt:
+                rrmin = rt / rmin
                 b_m = (180*self.viscositymetal*rt*(1-self.bedporosity)**2 / 
-                       (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (rrmin - rrmax))
                 b_s = (180*self.viscosityslag*rt*(1-self.bedporosity)**2 / 
-                       (eff_d**2 * self.bedporosity**3) * (1 - 0.5 * relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (rrmin - rrmax))
             else:
+                rrmin = rmin / rt
                 b_m = (180*self.viscositymetal*rt*(1-self.bedporosity)**2 / 
-                       (2*eff_d**2 * self.bedporosity**3) * (1 - relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (2 - rrmin - rrmax))
                 b_s = (180*self.viscosityslag*rt*(1-self.bedporosity)**2 / 
-                       (2*eff_d**2 * self.bedporosity**3) * (1 - relrad))
+                       (2*eff_d**2 * self.bedporosity**3) * (2 - rrmin - rrmax))
         else:
             raise NotImplementedError('Bed model ' + str(self.bedmodel) + 
                                       ' not implemented. Please use one of '
