@@ -18,8 +18,8 @@ class SubmergedArcFurnace():
                  tapholediameter, tapholelength, tapholeheight, densitymetal, 
                  densityslag, viscositymetal, viscosityslag, particlediameter, 
                  particlesphericity, bedporosity, bedmaxradius, bedmodel, 
-                 entrykl, channelfd, bedentryzone_yn, channellosses_yn, 
-                 hmetal_init, hslag_init):
+                 entrykl, channelfdslag, channelfdmetal, bedentryzone_yn, 
+                 channellosses_yn, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
         self.tapholelength = tapholelength
@@ -34,7 +34,8 @@ class SubmergedArcFurnace():
         self.bedmaxradius = bedmaxradius
         self.bedmodel = bedmodel
         self.entrykl = entrykl
-        self.channelfd = channelfd
+        self.channelfdslag = channelfdslag
+        self.channelfdmetal = channelfdmetal
         self.bedentryzone_yn = bedentryzone_yn
         self.channellosses_yn = channellosses_yn
         self.powerMW = powerMW
@@ -78,9 +79,9 @@ class SubmergedArcFurnace():
         a_m = 0.5*(1+self.entrykl)*self.densitymetal
         a_s = 0.5*(1+self.entrykl)*self.densityslag        
         if self.channellosses_yn:
-            a_m += (0.5*self.densitymetal*self.channelfd
+            a_m += (0.5*self.densitymetal*self.channelfdmetal
                     * self.tapholelength/self.tapholediameter)
-            a_s += (0.5*self.densityslag*self.channelfd
+            a_s += (0.5*self.densityslag*self.channelfdslag
                     * self.tapholelength/self.tapholediameter)
             
         # Bernoulli coefficient calculation
