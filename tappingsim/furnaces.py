@@ -1,6 +1,6 @@
-import numpy as np
+import numpy
 from scipy.constants import g, pi
-power_time_factor = 1000/3600
+POWER_TIME_FACTOR = 1000/3600
 
 class SubmergedArcFurnace():
     def __init__(self, activearea, tapholediameter, tapholeheight, kl, 
@@ -135,8 +135,8 @@ class SubmergedArcFurnace():
                 pa = g * (self.densityslag * (hs-hm) + self.densitymetal * hm)
         
         # estimate single-phase-only velocities
-        umetal = (-b_m+np.sqrt(b_m**2 + 4*pa*a_m)) / (2*a_m)
-        uslag = (-b_s+np.sqrt(b_s**2 + 4*pa*a_s)) / (2*a_s)
+        umetal = (-b_m+numpy.sqrt(b_m**2 + 4*pa*a_m)) / (2*a_m)
+        uslag = (-b_s+numpy.sqrt(b_s**2 + 4*pa*a_s)) / (2*a_s)
         h0_l = -rt - self.densityslag*uslag**2 / (8*g*(self.densitymetal - 
                                                        self.densityslag))
         h0_h = rt + self.densitymetal*umetal**2 / (8*g*(self.densitymetal - 
@@ -150,16 +150,16 @@ class SubmergedArcFurnace():
             # taphole partially filled
             if hm < h0_l:
                 # slag only
-                theta = 2 * np.arccos(-hs/rt)
+                theta = 2 * numpy.arccos(-hs/rt)
                 area_m = 0
-                area_s = 0.5 * rt**2 * (theta - np.sin(theta))
+                area_s = 0.5 * rt**2 * (theta - numpy.sin(theta))
             else:
                 # slag and metal
                 hi = hs - (hs-hm) * (hs+rt) / (hs-h0_l)
-                theta = 2*np.arccos(-hi/rt)
-                area_m = 0.5 * rt**2 * (theta - np.sin(theta))
-                theta = 2*np.arccos(-hs/rt)
-                area_s = 0.5 * rt**2 * (theta - np.sin(theta)) - area_m
+                theta = 2*numpy.arccos(-hi/rt)
+                area_m = 0.5 * rt**2 * (theta - numpy.sin(theta))
+                theta = 2*numpy.arccos(-hs/rt)
+                area_s = 0.5 * rt**2 * (theta - numpy.sin(theta)) - area_m
         else:
             # taphole completely filled
             if hm < h0_l:
@@ -173,8 +173,8 @@ class SubmergedArcFurnace():
             else:
                 # slag and metal
                 hi = rt * (1 - 2 * (h0_h-hm) / (h0_h-h0_l))
-                theta = 2 * np.arccos(-hi/rt)
-                area_m = 0.5 * rt**2 * (theta - np.sin(theta))
+                theta = 2 * numpy.arccos(-hi/rt)
+                area_m = 0.5 * rt**2 * (theta - numpy.sin(theta))
                 area_s = pi * rt**2 - area_m                
         vdotmetal = area_m * umetal
         vdotslag = area_s * uslag
@@ -190,7 +190,7 @@ class SubmergedArcFurnace():
         self.vdotmetal_out, self.vdotslag_out = vdotmetal, vdotslag
     
     def calc_dt(self, dt):
-        mdotmetal_in = power_time_factor * self.powerMW / self.metalSER
+        mdotmetal_in = POWER_TIME_FACTOR * self.powerMW / self.metalSER
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         dhmetal = dt * vdotmetal_in / (self.activearea * self.bedporosity)
@@ -204,7 +204,7 @@ class SubmergedArcFurnace():
         self.hslag += dhmetal + dhslag
         
         self.timetotaliser += dt
-        self.powertotaliserkWh += power_time_factor * dt * self.powerMW
+        self.powertotaliserkWh += POWER_TIME_FACTOR * dt * self.powerMW
         self.tapmasstotaliser += dt * (self.vdotmetal_out * self.densitymetal + 
                                        self.vdotslag_out * self.densityslag)
         self.tapvolumetotaliser += dt * (self.vdotmetal_out + self.vdotslag_out)
