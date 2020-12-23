@@ -2,14 +2,28 @@ import numpy
 from scipy.constants import g, pi
 POWER_TIME_FACTOR = 1000/3600
 
+
+def frictionfactor_darcy(diameter, roughness, velocity, density, viscosity):
+    d_over_e = diameter / roughness
+    Re = diameter * velocity * density / viscosity
+    a = 1 / (1 + (Re/2712) ** 8.4)
+    b = 1 / (1 + (Re/(150*d_over_e)) ** 1.8)
+    return ((64 / Re) ** a 
+            * (0.75 * numpy.log(Re/5.37)) ** (2*(a-1)*b) 
+            * (0.88 * numpy.log(3.41*d_over_e)) ** (2*(a-1)*(1-b)))
+
+
 class SubmergedArcFurnace():
-    def __init__(self, activearea, tapholediameter, tapholeheight, kl, 
-                 densitymetal, densityslag, viscositymetal, viscosityslag, 
-                 particlediameter, particlesphericity, bedporosity, 
-                 bedmaxradius, bedmodel, bedentryzone_yn, powerMW, metalSER, 
+    def __init__(self, activearea, tapholediameter, tapholeheight, 
+                 tapholelength, tapholeroughness, kl, densitymetal, 
+                 densityslag, viscositymetal, viscosityslag, particlediameter, 
+                 particlesphericity, bedporosity, bedmaxradius, bedmodel, 
+                 bedentryzone_yn, channellosses_yn, powerMW, metalSER, 
                  slagmetalmassratio, hmetal_init, hslag_init):
         self.activearea = activearea
         self.tapholediameter = tapholediameter
+        self.tapholelength = tapholelength
+        self.tapholeroughness = tapholeroughness
         self.tapholeheight = tapholeheight
         self.kl = kl
         self.hmetal = hmetal_init
@@ -24,6 +38,7 @@ class SubmergedArcFurnace():
         self.bedmaxradius = bedmaxradius
         self.bedmodel = bedmodel
         self.bedentryzone_yn = bedentryzone_yn
+        self.channellosses_yn = channellosses_yn
         self.powerMW = powerMW
         self.metalSER = metalSER
         self.slagmetalmassratio = slagmetalmassratio
