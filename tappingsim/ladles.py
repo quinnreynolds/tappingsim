@@ -1,11 +1,34 @@
+import numpy
 from scipy.constants import pi
 
+def overflow_step(interfacedeltah, *consts):
+    """Calculate metal volume fraction at ladle outlet as a function of the 
+    location of the slag-metal interface (deltah = interface 
+    position - ladle depth).
+    """
+    if interfacedeltah < 0:
+        return 0
+    else:
+        return 1
+
+def overflow_exp(interfacedeltah, *consts):
+    """Calculate metal volume fraction at ladle outlet as a function of the 
+    location of the slag-metal interface (deltah = interface 
+    position - ladle depth).
+    """
+    if interfacedeltah < 0:
+        return numpy.exp(consts[0]*interfacedeltah)
+    else:
+        return 1
+    
 class CylindricalLadle():
-    def __init__(self, diameter, depth, hmetal_init, hslag_init):
+    def __init__(self, diameter, depth, hmetal_init, hslag_init,
+                 overflowmodel=overflow_step,overflowconsts=[]):
         self.diameter = diameter
         self.depth = depth
         self.hmetal = hmetal_init
         self.hslag = hslag_init
+        self.overflowmodel = lambda dh: overflowmodel(dh, *overflowconsts)
         self.xarea = 0.25 * pi * self.diameter**2
         
     def empty_ladle(self):
@@ -29,8 +52,10 @@ class CylindricalLadle():
             self.vdotslag_out = 0
         else:
             if self.hmetal < self.depth:
-                self.vdotmetal_out = 0
-                self.vdotslag_out = (self.hslag-self.depth) * self.xarea / dt
+                mfrac = self.overflowmodel(self.hmetal-self.depth)
+                vout = (self.hslag-self.depth) * self.xarea
+                self.vdotmetal_out = vout * mfrac / dt
+                self.vdotslag_out = vout * (1-mfrac) / dt
             else:
                 self.vdotmetal_out = (self.hmetal-self.depth) * self.xarea / dt
                 self.vdotslag_out = (self.hslag-self.hmetal) * self.xarea / dt
