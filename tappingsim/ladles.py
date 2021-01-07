@@ -5,6 +5,8 @@ def overflow_step(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
     location of the slag-metal interface (deltah = interface 
     position - ladle depth).
+    
+    fraction = 0 if deltah < 0, else 1
     """
     if interfacedeltah < 0:
         return 0
@@ -15,6 +17,8 @@ def overflow_exp(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
     location of the slag-metal interface (deltah = interface 
     position - ladle depth).
+    
+    fraction = exp(consts[0]*deltah)
     """
     if interfacedeltah < 0:
         return numpy.exp(consts[0]*interfacedeltah)
@@ -44,18 +48,16 @@ class CylindricalLadle():
     
     def calc_vdot_out(self, dt):
         """Calculate outlet flowrates as a function of the current ladle state.
-        Simplified model with no carry-over of metal until the interface reaches
-        the ladle outlet.
         """
         if self.hslag < self.depth:
             self.vdotmetal_out = 0
             self.vdotslag_out = 0
         else:
             if self.hmetal < self.depth:
-                mfrac = self.overflowmodel(self.hmetal-self.depth)
+                vfrac = self.overflowmodel(self.hmetal-self.depth)
                 vout = (self.hslag-self.depth) * self.xarea
-                self.vdotmetal_out = vout * mfrac / dt
-                self.vdotslag_out = vout * (1-mfrac) / dt
+                self.vdotmetal_out = vout * vfrac / dt
+                self.vdotslag_out = vout * (1-vfrac) / dt
             else:
                 self.vdotmetal_out = (self.hmetal-self.depth) * self.xarea / dt
                 self.vdotslag_out = (self.hslag-self.hmetal) * self.xarea / dt

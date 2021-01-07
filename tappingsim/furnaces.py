@@ -45,29 +45,7 @@ class SubmergedArcFurnace():
         self.hslag = hslag_init
         self.allownegativeheights_yn = False
         self.tapholeopen_yn = False
-        self.timetotaliser = 0
-        self.powertotaliserkWh = 0
-        self.tapmasstotaliser = 0
-        self.tapvolumetotaliser = 0
     
-    def toggle_tapholeopen(self):
-        self.tapholeopen_yn = not self.tapholeopen_yn
-        
-    def toggle_allownegativeheights(self):
-        self.allownegativeheights_yn = not self.allownegativeheights_yn
-
-    def reset_time_totaliser(self):
-        self.timetotaliser = 0
-        
-    def reset_power_totaliser(self):
-        self.powertotaliserkWh = 0
-        
-    def reset_mass_totaliser(self):
-        self.tapmasstotaliser = 0
-
-    def reset_volume_totaliser(self):
-        self.tapvolumetotaliser = 0
-
     def calc_vdot_out(self):
         """Return outlet flowrates as a function of the current furnace state. 
         Extended model with semi-empirical interface deformation near tap-hole 
@@ -227,10 +205,3 @@ class SubmergedArcFurnace():
         dhslag = -dt*self.vdotslag_out / (self.activearea*self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        
-        self.timetotaliser += dt
-        self.powertotaliserkWh += (POWER_TIME_FACTOR * dt * self.powerMVA 
-                                   * self.powerfactor)
-        self.tapmasstotaliser += dt * (self.vdotmetal_out * self.densitymetal + 
-                                       self.vdotslag_out * self.densityslag)
-        self.tapvolumetotaliser += dt * (self.vdotmetal_out + self.vdotslag_out)
