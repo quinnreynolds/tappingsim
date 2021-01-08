@@ -27,7 +27,7 @@ def overflow_exp(interfacedeltah, *consts):
     
 class CylindricalLadle():
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
-                 overflowmodel=overflow_step,overflowconsts=[]):
+                 overflowmodel=overflow_step, overflowconsts=[]):
         self.diameter = diameter
         self.depth = depth
         self.hmetal = hmetal_init

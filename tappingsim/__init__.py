@@ -4,7 +4,7 @@
 #  Quinn Reynolds (Pyrometallurgy Division, Mintek)
 #  Jan Erik Olsen (Flow Technology, SINTEF Industri)
 
-__version__ = '0.4'
+__version__ = '0.5'
 
 from . import cite
 from . import coldmodels

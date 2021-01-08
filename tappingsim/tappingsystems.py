@@ -12,9 +12,12 @@ class FeMnSAF():
         self.metalmassfirstladle = 0
         self.slagmassfirstladle = 0
 
-    def toggle_tapholeopen(self):
-        self.furnace.tapholeopen_yn = not self.furnace.tapholeopen_yn
+    def open_taphole(self):
+        self.furnace.tapholeopen_yn = True
         
+    def close_taphole(self):
+        self.furnace.tapholeopen_yn = False
+
     def reset_time_totaliser(self):
         self.timetotaliser = 0
         
