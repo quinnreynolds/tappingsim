@@ -1,7 +1,7 @@
 import numpy
 from scipy.constants import pi
 
-def overflow_step(interfacedeltah, *consts):
+def overflowmodel_step(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
     location of the slag-metal interface (deltah = interface 
     position - ladle depth).
@@ -13,7 +13,7 @@ def overflow_step(interfacedeltah, *consts):
     else:
         return 1
 
-def overflow_exp(interfacedeltah, *consts):
+def overflowmodel_exp(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
     location of the slag-metal interface (deltah = interface 
     position - ladle depth).
