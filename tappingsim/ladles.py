@@ -3,28 +3,41 @@ from scipy.constants import pi
 
 def overflowmodel_step(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
-    location of the slag-metal interface (deltah = interface 
-    position - ladle depth).
+    location of the slag-metal interface (deltah = ladle depth - interface 
+    position).
     
     fraction = 0 if deltah < 0, else 1
     """
-    if interfacedeltah < 0:
+    if interfacedeltah > 0:
         return 0
     else:
         return 1
 
 def overflowmodel_exp(interfacedeltah, *consts):
     """Calculate metal volume fraction at ladle outlet as a function of the 
-    location of the slag-metal interface (deltah = interface 
-    position - ladle depth).
+    location of the slag-metal interface (deltah = ladle depth - interface 
+    position).
     
-    fraction = exp(consts[0]*deltah)
+    fraction = exp(-consts[0]*deltah)
     """
-    if interfacedeltah < 0:
-        return numpy.exp(consts[0]*interfacedeltah)
+    if interfacedeltah > 0:
+        return numpy.exp(-consts[0]*interfacedeltah)
     else:
         return 1
+
+def overflowmodel_expoffset(interfacedeltah, *consts):
+    """Calculate metal volume fraction at ladle outlet as a function of the 
+    location of the slag-metal interface (deltah = ladle depth - interface 
+    position).
     
+    fraction = exp(-consts[0]*(deltah-consts[1])
+    """
+    if interfacedeltah > consts[1]:
+        return numpy.exp(-consts[0]*(interfacedeltah-consts[1]))
+    else:
+        return 1
+
+
 class CylindricalLadle():
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
                  overflowmodel, overflowconsts):
@@ -54,7 +67,7 @@ class CylindricalLadle():
             self.vdotslag_out = 0
         else:
             if self.hmetal < self.depth:
-                vfrac = self.overflowmodel(self.hmetal-self.depth)
+                vfrac = self.overflowmodel(self.depth - self.hmetal)
                 vout = (self.hslag-self.depth) * self.xarea
                 self.vdotmetal_out = vout * vfrac / dt
                 self.vdotslag_out = vout * (1-vfrac) / dt
