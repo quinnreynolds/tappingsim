@@ -46,42 +46,36 @@ class CylindricalLadle():
         self.hmetal = hmetal_init
         self.hslag = hslag_init
         self.overflowmodel = lambda dh: overflowmodel(dh, *overflowconsts)
-        self.xarea = 0.25 * pi * self.diameter**2
+        self.diameter = self.diameter
         
     def empty_ladle(self):
         self.hmetal, self.hslag = 0, 0
         
-    def calc_volumes(self):
-        """Calculate slag and metal volume in ladle as a function of the current
-        ladle state.
-        """
-        vm = self.hmetal * self.xarea
-        vs = (self.hslag - self.hmetal) * self.xarea
-        return vm, vs
-    
     def calc_vdot_out(self, dt):
         """Calculate outlet flowrates as a function of the current ladle state.
         """
+        xarea = 0.25 * pi * self.diameter**2
         if self.hslag < self.depth:
             self.vdotmetal_out = 0
             self.vdotslag_out = 0
         else:
             if self.hmetal < self.depth:
                 vfrac = self.overflowmodel(self.depth - self.hmetal)
-                vout = (self.hslag-self.depth) * self.xarea
+                vout = (self.hslag-self.depth) * xarea
                 self.vdotmetal_out = vout * vfrac / dt
                 self.vdotslag_out = vout * (1-vfrac) / dt
             else:
-                self.vdotmetal_out = (self.hmetal-self.depth) * self.xarea / dt
-                self.vdotslag_out = (self.hslag-self.hmetal) * self.xarea / dt
+                self.vdotmetal_out = (self.hmetal-self.depth) * xarea / dt
+                self.vdotslag_out = (self.hslag-self.hmetal) * xarea / dt
     
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
-        dhmetal = dt*vdotmetal_in / self.xarea
-        dhslag = dt*vdotslag_in / self.xarea
+        xarea = 0.25 * pi * self.diameter**2
+        dhmetal = dt*vdotmetal_in / xarea
+        dhslag = dt*vdotslag_in / xarea
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
         self.calc_vdot_out(dt)
-        dhmetal = -dt*self.vdotmetal_out / self.xarea
-        dhslag = -dt*self.vdotslag_out / self.xarea
+        dhmetal = -dt*self.vdotmetal_out / xarea
+        dhslag = -dt*self.vdotslag_out / xarea
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
