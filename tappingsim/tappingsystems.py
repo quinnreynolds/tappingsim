@@ -1,4 +1,4 @@
-POWER_TIME_FACTOR = 1/3600
+POWER_TIME_FACTOR = 1000/3600
 
 class FeMnSAF():
     def __init__(self, furnace, launder, ladle1, ladle2):
@@ -6,7 +6,7 @@ class FeMnSAF():
         self.launder = launder
         self.ladles = [ladle1, ladle2]
         self.timetotaliser = 0
-        self.powertotaliserMWh = 0
+        self.powertotaliserkWh = 0
         self.metalmasstotaliser = 0
         self.slagmasstotaliser = 0
         self.metalmassfirstladle = 0
@@ -26,7 +26,7 @@ class FeMnSAF():
         self.timetotaliser = 0
         
     def reset_power_totaliser(self):
-        self.powertotaliserMWh = 0
+        self.powertotaliserkWh = 0
         
     def reset_mass_totaliser(self):
         self.metalmasstotaliser = 0
@@ -44,7 +44,7 @@ class FeMnSAF():
             lnext.calc_dt(dt, lprev.vdotmetal_out, lprev.vdotslag_out)
 
         self.timetotaliser += dt
-        self.powertotaliserMWh += dt * (POWER_TIME_FACTOR 
+        self.powertotaliserkWh += dt * (POWER_TIME_FACTOR 
                                         * self.furnace.powerMVA 
                                         * self.furnace.powerfactor)
         self.metalmasstotaliser += dt * (self.furnace.vdotmetal_out 
