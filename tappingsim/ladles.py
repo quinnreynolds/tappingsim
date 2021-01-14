@@ -2,40 +2,27 @@ import numpy
 from scipy.constants import pi
 
 def overflowmodel_step(interfacedeltah, *consts):
-    """Calculate metal volume fraction at ladle outlet as a function of the 
-    location of the slag-metal interface (deltah = ladle depth - interface 
-    position).
+    """Calculate metal volume fraction entrained in slag outflow stream as a 
+    function of the location of the slag-metal interface (deltah = ladle 
+    depth - interface position).
     
-    fraction = 0 if deltah < 0, else 1
+    fraction = 0
     """
-    if interfacedeltah > 0:
-        return 0
-    else:
-        return 1
+    return 0
 
 def overflowmodel_exp(interfacedeltah, *consts):
-    """Calculate metal volume fraction at ladle outlet as a function of the 
-    location of the slag-metal interface (deltah = ladle depth - interface 
-    position).
+    """Calculate metal volume fraction entrained in slag outflow stream as a 
+    function of the location of the slag-metal interface (deltah = ladle 
+    depth - interface position).
     
-    fraction = exp(-consts[0]*deltah)
+    fraction = consts[0]*exp(-consts[1]*deltah)   if deltah >= 0
+             = consts[0]                          if deltah < 0
     """
     if interfacedeltah > 0:
-        return numpy.exp(-consts[0]*interfacedeltah)
+        return consts[0]*numpy.exp(-consts[1]*interfacedeltah)
     else:
-        return 1
+        return consts[0]
 
-def overflowmodel_expoffset(interfacedeltah, *consts):
-    """Calculate metal volume fraction at ladle outlet as a function of the 
-    location of the slag-metal interface (deltah = ladle depth - interface 
-    position).
-    
-    fraction = exp(-consts[0]*(deltah-consts[1])
-    """
-    if interfacedeltah > consts[1]:
-        return numpy.exp(-consts[0]*(interfacedeltah-consts[1]))
-    else:
-        return 1
 
 
 class CylindricalLadle():
@@ -48,9 +35,6 @@ class CylindricalLadle():
         self.overflowmodel = lambda dh: overflowmodel(dh, *overflowconsts)
         self.diameter = self.diameter
         
-    def empty_ladle(self):
-        self.hmetal, self.hslag = 0, 0
-        
     def calc_vdot_out(self, dt):
         """Calculate outlet flowrates as a function of the current ladle state.
         """
@@ -59,14 +43,16 @@ class CylindricalLadle():
             self.vdotmetal_out = 0
             self.vdotslag_out = 0
         else:
+            vfrac = self.overflowmodel(self.depth - self.hmetal)
             if self.hmetal < self.depth:
-                vfrac = self.overflowmodel(self.depth - self.hmetal)
-                vout = (self.hslag-self.depth) * xarea
-                self.vdotmetal_out = vout * vfrac / dt
-                self.vdotslag_out = vout * (1-vfrac) / dt
+                vslagout = (self.hslag-self.depth) * xarea
+                self.vdotmetal_out = vslagout * vfrac / dt
+                self.vdotslag_out = vslagout * (1-vfrac) / dt
             else:
-                self.vdotmetal_out = (self.hmetal-self.depth) * xarea / dt
-                self.vdotslag_out = (self.hslag-self.hmetal) * xarea / dt
+                vslagout = (self.hslag-self.hmetal) * xarea
+                self.vdotmetal_out = ((self.hmetal-self.depth) * xarea
+                                      + vslagout * vfrac) / dt
+                self.vdotslag_out = vslagout * (1-vfrac) / dt
     
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         xarea = 0.25 * pi * self.diameter**2
