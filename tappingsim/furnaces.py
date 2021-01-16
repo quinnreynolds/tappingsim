@@ -50,12 +50,14 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
 
 class SubmergedArcFurnace():
     def __init__(self, powerMVA, powerfactor, metalSER, slagmetalmassratio, 
-                 activearea, tapholediameter, tapholelength, tapholeroughness,
-                 tapholeheight, densitymetal, densityslag, viscositymetal, 
-                 viscosityslag, particlediameter, particlesphericity, 
-                 bedporosity, bedmindiameter, bedmaxdiameter, bedmodel, 
-                 entrykl, fdmodel, hmetal_init, hslag_init):
-        self.activearea = activearea
+                 furnacediameter, activeareafraction, tapholediameter, 
+                 tapholelength, tapholeroughness, tapholeheight, densitymetal, 
+                 densityslag, viscositymetal, viscosityslag, particlediameter, 
+                 particlesphericity, bedporosity, bedmindiameter, 
+                 bedmaxdiameter, bedmodel, entrykl, fdmodel, hmetal_init, 
+                 hslag_init):
+        self.furnacediameter = furnacediameter
+        self.activeareafraction = activeareafraction
         self.tapholediameter = tapholediameter
         self.tapholelength = tapholelength
         self.tapholeroughness = tapholeroughness
@@ -211,16 +213,18 @@ class SubmergedArcFurnace():
             self.umetal, self.vdotmetal_out = 0, 0
 
     def calc_dt(self, dt):
+        activearea = (self.activeareafraction 
+                      * 0.25*numpy.pi*self.furnacediameter**2)
         mdotmetal_in = (POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
                         / self.metalSER)
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
-        dhmetal = dt * vdotmetal_in / (self.activearea * self.bedporosity)
-        dhslag = dt * vdotslag_in / (self.activearea * self.bedporosity)
+        dhmetal = dt * vdotmetal_in / (activearea * self.bedporosity)
+        dhslag = dt * vdotslag_in / (activearea * self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
         self.calc_vdot_out()
-        dhmetal = -dt*self.vdotmetal_out / (self.activearea*self.bedporosity)
-        dhslag = -dt*self.vdotslag_out / (self.activearea*self.bedporosity)
+        dhmetal = -dt*self.vdotmetal_out / (activearea*self.bedporosity)
+        dhslag = -dt*self.vdotslag_out / (activearea*self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
