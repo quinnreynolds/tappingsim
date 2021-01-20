@@ -2,10 +2,12 @@ import numpy
 POWER_TIME_FACTOR = 1000/3600
 
 class FeMnSAF():
-    def __init__(self, furnace, launder, ladles):
+    def __init__(self, furnace, launder, ladles, taptotaptime, tappingtime):
         self.furnace = furnace
         self.launder = launder
         self.ladles = ladles
+        self.taptotaptime = taptotaptime
+        self.tappingtime = tappingtime
         self.timetotaliser = 0
         self.powertotaliserkWh = 0
         self.metalmasstotaliser = 0
