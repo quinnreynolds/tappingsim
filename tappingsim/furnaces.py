@@ -82,39 +82,37 @@ class SubmergedArcFurnace():
         self.hslag = hslag_init
         self.allownegativeheights_yn = False
         self.tapholeopen_yn = False
-        self.umetal = 0
-        self.uslag = 0
     
-    def calc_vdot_out(self):
-        """Return outlet flowrates as a function of the current furnace state. 
-        Extended model with semi-empirical interface deformation near tap-hole 
-        entry.
-        """
-        if self.tapholeopen_yn:
-            rt = 0.5 * self.tapholediameter
-            a_m = 0.5 * (1 + self.entrykl) * self.densitymetal
-            a_s = 0.5 * (1 + self.entrykl) * self.densityslag
+    def _calc_vdot_out(self, hmetal, hslag, tapholediameter, tapholelength, 
+                       tapholeheight, tapholeroughness, entrykl, 
+                       bedmindiameter, bedmaxdiameter, bedporosity, 
+                       particlediameter, particlesphericity, densitymetal, 
+                       densityslag, viscositymetal, viscosityslag, 
+                       tapholeopen_yn, allownegativeheights_yn, bedmodel, 
+                       fdmodel):
+        if tapholeopen_yn:
+            rt = 0.5 * tapholediameter
+            a_m = 0.5 * (1 + entrykl) * densitymetal
+            a_s = 0.5 * (1 + entrykl) * densityslag
             b_m, b_s = 0, 0
             
             # Bed pressure drop coefficient calculation
-            ab, bb = self.bedmodel(self.tapholediameter, self.bedmindiameter, 
-                                   self.bedmaxdiameter, self.particlediameter, 
-                                   self.particlesphericity, self.bedporosity,
-                                   self.viscositymetal, self.densitymetal)
+            ab, bb = bedmodel(tapholediameter, bedmindiameter, bedmaxdiameter, 
+                              particlediameter, particlesphericity, bedporosity,
+                              viscositymetal, densitymetal)
             a_m += ab
             b_m += bb
-            ab, bb = self.bedmodel(self.tapholediameter, self.bedmindiameter, 
-                                   self.bedmaxdiameter, self.particlediameter, 
-                                   self.particlesphericity, self.bedporosity,
-                                   self.viscosityslag, self.densityslag)
+            ab, bb = bedmodel(tapholediameter, bedmindiameter, bedmaxdiameter, 
+                              particlediameter, particlesphericity, bedporosity,
+                              viscosityslag, densityslag)
             a_s += ab
             b_s += bb
                 
             # Tapping pressure calculation (applied to both phases, based on 
             # undeformed interfaces). Integrated pressure field in z, averaged 
             # with total height in taphole.
-            hs = self.hslag-self.tapholeheight
-            hm = self.hmetal-self.tapholeheight
+            hs = hslag - tapholeheight
+            hm = hmetal - tapholeheight
             if hs < -rt:
                 # liquid level below taphole - no flow
                 pa = 0
@@ -122,49 +120,45 @@ class SubmergedArcFurnace():
                 # liquid level between taphole limits
                 if hm < -rt:
                     # slag only
-                    pa = 0.5*g*(hs+rt)*self.densityslag
+                    pa = 0.5*g*(hs+rt)*densityslag
                 else:
                     # slag and metal
-                    pa = 0.5*g*((self.densitymetal*(hm+rt)**2 
-                                 + self.densityslag*(hs*(hs+2*rt) 
-                                                     - hm*(hm+2*rt))) / (hs+rt))
+                    pa = 0.5*g*((densitymetal*(hm+rt)**2 
+                                 + densityslag*(hs*(hs+2*rt) 
+                                                - hm*(hm+2*rt))) / (hs+rt))
             else:
                 # liquid level above taphole
                 if hm < -rt:
                     # slag only
-                    pa = hs * self.densityslag * g
+                    pa = hs * densityslag * g
                 elif hm < rt:
                     # slag and metal
-                    pa = 0.25*g*((self.densitymetal*(hm+rt)**2 
-                                  + self.densityslag*(rt*(4*hs-rt)
-                                                      - hm*(hm+2*rt))) / rt)
+                    pa = 0.25*g*((densitymetal*(hm+rt)**2 
+                                  + densityslag*(rt*(4*hs-rt) 
+                                                 - hm*(hm+2*rt))) / rt)
                 else:
                     # metal only
-                    pa = g * (self.densityslag*(hs-hm) + self.densitymetal*hm)
+                    pa = g * (densityslag*(hs-hm) + densitymetal*hm)
             
             # calculate phase velocities
-            converged = 1
+            converged, umetal, uslag = 1, 1, 1
             while converged > 1e-6:
-                fdm = self.fdmodel(self.umetal, self.densitymetal, 
-                                   self.viscositymetal,self.tapholediameter, 
-                                   self.tapholeroughness)
-                fds = self.fdmodel(self.uslag, self.densityslag, 
-                                   self.viscosityslag, self.tapholediameter, 
-                                   self.tapholeroughness)
-                a_mc = a_m + (0.5 * self.densitymetal * fdm 
-                              * self.tapholelength/self.tapholediameter)
-                a_sc = a_s + (0.5 * self.densityslag * fds
-                              * self.tapholelength/self.tapholediameter)
+                fdm = fdmodel(umetal, densitymetal, viscositymetal, 
+                              tapholediameter, tapholeroughness)
+                fds = fdmodel(uslag, densityslag, viscosityslag, 
+                              tapholediameter, tapholeroughness)
+                a_mc = a_m + (0.5 * densitymetal * fdm 
+                              * tapholelength/tapholediameter)
+                a_sc = a_s + (0.5 * densityslag * fds
+                              * tapholelength/tapholediameter)
                 nvm = (-b_m+numpy.sqrt(b_m**2 + 4*pa*a_mc)) / (2*a_mc)
                 nvs = (-b_s+numpy.sqrt(b_s**2 + 4*pa*a_sc)) / (2*a_sc)
-                converged = max(abs(nvm-self.umetal), abs(nvs-self.uslag))
-                self.umetal, self.uslag = nvm, nvs
+                converged = max(abs(nvm-umetal), abs(nvs-uslag))
+                umetal, uslag = nvm, nvs
                 
             # interface deformations
-            h0_l = -rt-self.densityslag*self.uslag**2/(8*g*(self.densitymetal 
-                                                            -self.densityslag))
-            h0_h = rt+self.densitymetal*self.umetal**2/(8*g*(self.densitymetal 
-                                                             -self.densityslag))
+            h0_l = -rt - densityslag*uslag**2/(8*g*(densitymetal-densityslag))
+            h0_h = rt + densitymetal*umetal**2/(8*g*(densitymetal-densityslag))
             
             if hs < -rt:
                 # slag below taphole - no flow
@@ -200,17 +194,18 @@ class SubmergedArcFurnace():
                     theta = 2 * numpy.arccos(-hi/rt)
                     area_m = 0.5 * rt**2 * (theta - numpy.sin(theta))
                     area_s = pi * rt**2 - area_m                
-            self.vdotmetal_out = area_m * self.umetal
-            self.vdotslag_out = area_s * self.uslag
+            vdotmetal_out = area_m * umetal
+            vdotslag_out = area_s * uslag
             
-            if not self.allownegativeheights_yn:
-                if self.hslag <= 0:
-                    self.uslag, self.vdotslag_out = 0, 0
-                if self.hmetal <= 0:
-                    self.umetal, self.vdotmetal_out = 0, 0
+            if not allownegativeheights_yn:
+                if hslag <= 0:
+                    vdotslag_out = 0
+                if hmetal <= 0:
+                    vdotmetal_out = 0, 0
         else:
-            self.uslag, self.vdotslag_out = 0, 0
-            self.umetal, self.vdotmetal_out = 0, 0
+            vdotmetal_out, vdotslag_out = 0, 0
+        
+        return vdotmetal_out, vdotslag_out
 
     def calc_dt(self, dt):
         activearea = (self.activeareafraction 
@@ -219,12 +214,24 @@ class SubmergedArcFurnace():
                         / self.metalSER)
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
-        dhmetal = dt * vdotmetal_in / (activearea * self.bedporosity)
-        dhslag = dt * vdotslag_in / (activearea * self.bedporosity)
+        
+        vdotmetal_out, vdotslag_out = self._calc_vdot_out(self.hmetal, 
+            self.hslag, self.tapholediameter, self.tapholelength, 
+            self.tapholeheight, self.tapholeroughness, self.entrykl, 
+            self.bedmindiameter, self.bedmaxdiameter, self.bedporosity, 
+            self.particlediameter, self.particlesphericity, self.densitymetal, 
+            self.densityslag, self.viscositymetal, self.viscosityslag, 
+            self.tapholeopen_yn, self.allownegativeheights_yn, 
+            self.bedmodel, self.fdmodel)
+        
+        dhmetal = dt*(vdotmetal_in-vdotmetal_out)/(activearea*self.bedporosity)
+        dhslag = dt*(vdotslag_in-vdotslag_out)/(activearea*self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        self.calc_vdot_out()
-        dhmetal = -dt*self.vdotmetal_out / (activearea*self.bedporosity)
-        dhslag = -dt*self.vdotslag_out / (activearea*self.bedporosity)
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
+        self.vdotmetal_out = vdotmetal_out
+        self.vdotslag_out = vdotslag_out
+        
+    def calc_time_period(self, times):
+        # TODO
+        pass
+        
