@@ -130,7 +130,7 @@ class SubmergedArcFurnace():
                     pa = 0.5*g*(hs+rt)*densityslag
                 else:
                     # slag and metal
-                    pa = 0.5*g*((densitymetal*(hm+rt)**2 
+                    pa = 0.5*g*((densitymetal*(hm+rt)*(hm+rt)
                                  + densityslag*(hs*(hs+2*rt) 
                                                 - hm*(hm+2*rt))) / (hs+rt))
             else:
@@ -140,7 +140,7 @@ class SubmergedArcFurnace():
                     pa = hs * densityslag * g
                 elif hm < rt:
                     # slag and metal
-                    pa = 0.25*g*((densitymetal*(hm+rt)**2 
+                    pa = 0.25*g*((densitymetal*(hm+rt)*(hm+rt)
                                   + densityslag*(rt*(4*hs-rt) 
                                                  - hm*(hm+2*rt))) / rt)
                 else:
@@ -158,14 +158,16 @@ class SubmergedArcFurnace():
                               * tapholelength/tapholediameter)
                 a_sc = a_s + (0.5 * densityslag * fds
                               * tapholelength/tapholediameter)
-                nvm = (-b_m+math.sqrt(b_m**2 + 4*pa*a_mc)) / (2*a_mc)
-                nvs = (-b_s+math.sqrt(b_s**2 + 4*pa*a_sc)) / (2*a_sc)
+                nvm = (-b_m+math.sqrt(b_m*b_m + 4*pa*a_mc)) / (2*a_mc)
+                nvs = (-b_s+math.sqrt(b_s*b_s + 4*pa*a_sc)) / (2*a_sc)
                 converged = abs(nvm-umetal) + abs(nvs-uslag)
                 umetal, uslag = nvm, nvs
                 
             # interface deformations
-            h0_l = -rt - densityslag*uslag**2/(8*g*(densitymetal-densityslag))
-            h0_h = rt + densitymetal*umetal**2/(8*g*(densitymetal-densityslag))
+            h0_l = (-rt - densityslag*uslag*uslag 
+                    / (8*g*(densitymetal-densityslag)))
+            h0_h = (rt + densitymetal*umetal*umetal 
+                    / (8*g*(densitymetal-densityslag)))
             
             if hs < -rt:
                 # slag below taphole - no flow
@@ -177,30 +179,30 @@ class SubmergedArcFurnace():
                     # slag only
                     theta = 2 * math.acos(-hs/rt)
                     area_m = 0
-                    area_s = 0.5 * rt**2 * (theta - math.sin(theta))
+                    area_s = 0.5 * rt*rt * (theta - math.sin(theta))
                 else:
                     # slag and metal
                     hi = hs - (hs-hm) * (hs+rt) / (hs-h0_l)
                     theta = 2*math.acos(-hi/rt)
-                    area_m = 0.5 * rt**2 * (theta - math.sin(theta))
+                    area_m = 0.5 * rt*rt * (theta - math.sin(theta))
                     theta = 2*math.acos(-hs/rt)
-                    area_s = 0.5 * rt**2 * (theta - math.sin(theta)) - area_m
+                    area_s = 0.5 * rt*rt * (theta - math.sin(theta)) - area_m
             else:
                 # taphole completely filled
                 if hm < h0_l:
                     # slag only
                     area_m = 0
-                    area_s = pi * rt**2
+                    area_s = pi * rt*rt
                 elif hm > h0_h:
                     # metal only
-                    area_m = pi * rt**2
+                    area_m = pi * rt*rt
                     area_s = 0
                 else:
                     # slag and metal
                     hi = rt * (1 - 2 * (h0_h-hm) / (h0_h-h0_l))
                     theta = 2 * math.acos(-hi/rt)
-                    area_m = 0.5 * rt**2 * (theta - math.sin(theta))
-                    area_s = pi * rt**2 - area_m                
+                    area_m = 0.5 * rt*rt * (theta - math.sin(theta))
+                    area_s = pi * rt*rt - area_m                
             vdotmetal_out = area_m * umetal
             vdotslag_out = area_s * uslag
             
