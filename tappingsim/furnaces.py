@@ -45,14 +45,16 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
                   * (2 - rrmin - rrmax))
     return aconst, bconst
     
-def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
+def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
     d_over_e = diameter / roughness
-    Re = max(diameter * velocity * density / viscosity, 1)
-    a = 1 / (1 + (Re/2712) ** 8.4)
-    b = 1 / (1 + (Re/(150*d_over_e)) ** 1.8)
-    return ((64 / Re) ** a 
-            * (0.75 * math.log(Re/5.37)) ** (2*(a-1)*b) 
-            * (0.88 * math.log(3.41*d_over_e)) ** (2*(a-1)*(1-b)))
+    Re = diameter * velocity * density / viscosity
+    if Re < 1:
+        Re = 1
+    a = 1 / (1 + (0.000368732*Re) ** 8.4)
+    b = 1 / (1 + (0.006666667*Re/d_over_e) ** 1.8)
+    return ((64 / Re) ** a
+            * 0.75 * math.log(0.186219739*Re) ** (2*(a-1)*b) 
+            * 0.88 * math.log(3.41*d_over_e) ** (2*(a-1)*(1-b)))
 
 
 class SubmergedArcFurnace():
