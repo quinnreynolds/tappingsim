@@ -1,5 +1,4 @@
 import math
-#import numpy
 from scipy.constants import g, pi
 
 POWER_TIME_FACTOR = 1000/3600
@@ -7,17 +6,19 @@ POWER_TIME_FACTOR = 1000/3600
 def bedmodel_carmenkozeny(tapholediameter, bedmindiameter, bedmaxdiameter,
                           bedparticlediameter, bedparticlesphericity, 
                           bedporosity, viscosity, density):
-    rt, rmin, rmax = 0.5*tapholediameter, 0.5*bedmindiameter, 0.5*bedmaxdiameter
+    rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
-    rrmax = rt / rmax
+    rrmax = rt / (0.5*bedmaxdiameter)
     if rmin > rt:
         rrmin = rt / rmin
-        bconst = (180 * viscosity * rt * (1-bedporosity)**2 / 
-                  (2*eff_d**2 * bedporosity**3) * (rrmin - rrmax))
+        bconst = (180 * viscosity * rt * (1-bedporosity)*(1-bedporosity) 
+                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
+                  * (rrmin - rrmax))
     else:
         rrmin = rmin / rt
-        bconst = (180 * viscosity * rt * (1-bedporosity)**2 / 
-               (2*eff_d**2 * bedporosity**3) * (2 - rrmin - rrmax))
+        bconst = (180 * viscosity * rt * (1-bedporosity)*(1-bedporosity)
+                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
+                  * (2 - rrmin - rrmax))
     return 0, bconst
 
 def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
@@ -28,16 +29,20 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
     rrmax = rt / ( 0.5*bedmaxdiameter)
     if rmin > rt:
         rrmin = rt / rmin
-        aconst = (1.75 * density * rt * (1-bedporosity) / 
-                  (12*eff_d*bedporosity**3) * (rrmin**3 - rrmax**3))
-        bconst = (150*viscosity*rt*(1-bedporosity)**2 / 
-                  (2*eff_d**2 * bedporosity**3) * (rrmin - rrmax))
+        aconst = (1.75 * density * rt * (1-bedporosity) 
+                  / (12*eff_d*bedporosity*bedporosity*bedporosity) 
+                  * (rrmin*rrmin*rrmin - rrmax*rrmax*rrmax))
+        bconst = (150*viscosity*rt*(1-bedporosity)*(1-bedporosity) 
+                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
+                  * (rrmin - rrmax))
     else:
         rrmin = rmin / rt
-        aconst = (1.75 * density * rt * (1-bedporosity) / 
-                  (12*eff_d*bedporosity**3) * (4 - 3*rrmin**3 - rrmax**3))
-        bconst = (150 * viscosity * rt * (1-bedporosity)**2 / 
-                  (2*eff_d**2 * bedporosity**3) * (2 - rrmin - rrmax))
+        aconst = (1.75 * density * rt * (1-bedporosity) 
+                  / (12*eff_d*bedporosity*bedporosity*bedporosity) 
+                  * (4 - 3*rrmin*rrmin*rrmin - rrmax*rrmax*rrmax))
+        bconst = (150 * viscosity * rt * (1-bedporosity)*(1-bedporosity) 
+                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
+                  * (2 - rrmin - rrmax))
     return aconst, bconst
     
 def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
