@@ -1,5 +1,7 @@
-import numpy
+import math
+#import numpy
 from scipy.constants import g, pi
+
 POWER_TIME_FACTOR = 1000/3600
 
 def bedmodel_carmenkozeny(tapholediameter, bedmindiameter, bedmaxdiameter,
@@ -21,9 +23,9 @@ def bedmodel_carmenkozeny(tapholediameter, bedmindiameter, bedmaxdiameter,
 def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
                    bedparticlediameter, bedparticlesphericity, bedporosity,
                    viscosity, density):
-    rt, rmin, rmax = 0.5*tapholediameter, 0.5*bedmindiameter, 0.5*bedmaxdiameter
+    rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
-    rrmax = rt / rmax
+    rrmax = rt / ( 0.5*bedmaxdiameter)
     if rmin > rt:
         rrmin = rt / rmin
         aconst = (1.75 * density * rt * (1-bedporosity) / 
@@ -44,8 +46,8 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
     a = 1 / (1 + (Re/2712) ** 8.4)
     b = 1 / (1 + (Re/(150*d_over_e)) ** 1.8)
     return ((64 / Re) ** a 
-            * (0.75 * numpy.log(Re/5.37)) ** (2*(a-1)*b) 
-            * (0.88 * numpy.log(3.41*d_over_e)) ** (2*(a-1)*(1-b)))
+            * (0.75 * math.log(Re/5.37)) ** (2*(a-1)*b) 
+            * (0.88 * math.log(3.41*d_over_e)) ** (2*(a-1)*(1-b)))
 
 
 class SubmergedArcFurnace():
@@ -151,9 +153,9 @@ class SubmergedArcFurnace():
                               * tapholelength/tapholediameter)
                 a_sc = a_s + (0.5 * densityslag * fds
                               * tapholelength/tapholediameter)
-                nvm = (-b_m+numpy.sqrt(b_m**2 + 4*pa*a_mc)) / (2*a_mc)
-                nvs = (-b_s+numpy.sqrt(b_s**2 + 4*pa*a_sc)) / (2*a_sc)
-                converged = max(abs(nvm-umetal), abs(nvs-uslag))
+                nvm = (-b_m+math.sqrt(b_m**2 + 4*pa*a_mc)) / (2*a_mc)
+                nvs = (-b_s+math.sqrt(b_s**2 + 4*pa*a_sc)) / (2*a_sc)
+                converged = abs(nvm-umetal) + abs(nvs-uslag)
                 umetal, uslag = nvm, nvs
                 
             # interface deformations
@@ -168,16 +170,16 @@ class SubmergedArcFurnace():
                 # taphole partially filled
                 if hm < h0_l:
                     # slag only
-                    theta = 2 * numpy.arccos(-hs/rt)
+                    theta = 2 * math.acos(-hs/rt)
                     area_m = 0
-                    area_s = 0.5 * rt**2 * (theta - numpy.sin(theta))
+                    area_s = 0.5 * rt**2 * (theta - math.sin(theta))
                 else:
                     # slag and metal
                     hi = hs - (hs-hm) * (hs+rt) / (hs-h0_l)
-                    theta = 2*numpy.arccos(-hi/rt)
-                    area_m = 0.5 * rt**2 * (theta - numpy.sin(theta))
-                    theta = 2*numpy.arccos(-hs/rt)
-                    area_s = 0.5 * rt**2 * (theta - numpy.sin(theta)) - area_m
+                    theta = 2*math.acos(-hi/rt)
+                    area_m = 0.5 * rt**2 * (theta - math.sin(theta))
+                    theta = 2*math.acos(-hs/rt)
+                    area_s = 0.5 * rt**2 * (theta - math.sin(theta)) - area_m
             else:
                 # taphole completely filled
                 if hm < h0_l:
@@ -191,8 +193,8 @@ class SubmergedArcFurnace():
                 else:
                     # slag and metal
                     hi = rt * (1 - 2 * (h0_h-hm) / (h0_h-h0_l))
-                    theta = 2 * numpy.arccos(-hi/rt)
-                    area_m = 0.5 * rt**2 * (theta - numpy.sin(theta))
+                    theta = 2 * math.acos(-hi/rt)
+                    area_m = 0.5 * rt**2 * (theta - math.sin(theta))
                     area_s = pi * rt**2 - area_m                
             vdotmetal_out = area_m * umetal
             vdotslag_out = area_s * uslag
@@ -209,7 +211,7 @@ class SubmergedArcFurnace():
 
     def calc_dt(self, dt):
         activearea = (self.activeareafraction 
-                      * 0.25*numpy.pi*self.furnacediameter**2)
+                      * 0.25*pi*self.furnacediameter**2)
         mdotmetal_in = (POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
                         / self.metalSER)
         vdotmetal_in = mdotmetal_in / self.densitymetal
