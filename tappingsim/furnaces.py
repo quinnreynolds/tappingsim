@@ -1,7 +1,7 @@
 import math
 from scipy.constants import g, pi
 
-POWER_TIME_FACTOR = 1000/3600
+_POWER_TIME_FACTOR = 1000/3600
 
 def bedmodel_carmenkozeny(tapholediameter, bedmindiameter, bedmaxdiameter,
                           bedparticlediameter, bedparticlesphericity, 
@@ -27,34 +27,70 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
     rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
     rrmax = rt / ( 0.5*bedmaxdiameter)
+    cmult = rt * (1-bedporosity) / (eff_d*eff_d * 
+                                    bedporosity*bedporosity*bedporosity)
+    amult = 0.145833333 * density * eff_d * cmult
+    bmult = 75 * viscosity * (1-bedporosity) * cmult
     if rmin > rt:
         rrmin = rt / rmin
-        aconst = (1.75 * density * rt * (1-bedporosity) 
-                  / (12*eff_d*bedporosity*bedporosity*bedporosity) 
-                  * (rrmin*rrmin*rrmin - rrmax*rrmax*rrmax))
-        bconst = (150*viscosity*rt*(1-bedporosity)*(1-bedporosity) 
-                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
-                  * (rrmin - rrmax))
+        aconst = amult * (rrmin*rrmin*rrmin - rrmax*rrmax*rrmax)
+        bconst = bmult * (rrmin - rrmax)
     else:
         rrmin = rmin / rt
-        aconst = (1.75 * density * rt * (1-bedporosity) 
-                  / (12*eff_d*bedporosity*bedporosity*bedporosity) 
-                  * (4 - 3*rrmin*rrmin*rrmin - rrmax*rrmax*rrmax))
-        bconst = (150 * viscosity * rt * (1-bedporosity)*(1-bedporosity) 
-                  / (2*eff_d*eff_d * bedporosity*bedporosity*bedporosity) 
-                  * (2 - rrmin - rrmax))
+        aconst = amult * (4 - 3*rrmin*rrmin*rrmin - rrmax*rrmax*rrmax)
+        bconst = bmult * (2 - rrmin - rrmax)
     return aconst, bconst
     
 def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
     d_over_e = diameter / roughness
-    Re = diameter * velocity * density / viscosity
-    if Re < 1:
-        Re = 1
-    a = 1 / (1 + (0.000368732*Re) ** 8.4)
-    b = 1 / (1 + (0.006666667*Re/d_over_e) ** 1.8)
-    return ((64 / Re) ** a
-            * 0.75 * math.log(0.186219739*Re) ** (2*(a-1)*b) 
+    NRe = diameter * velocity * density / viscosity
+    if NRe < 1:
+        NRe = 1
+    a = 1 / (1 + (0.000368732*NRe) ** 8.4)
+    b = 1 / (1 + (NRe/(150*d_over_e)) ** 1.8)
+    return ((64 / NRe) ** a
+            * 0.75 * math.log(0.186219739*NRe) ** (2*(a-1)*b) 
             * 0.88 * math.log(3.41*d_over_e) ** (2*(a-1)*(1-b)))
+
+def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
+    e_over_d = roughness / diameter
+    invNRe = viscosity / (diameter * velocity * density)
+    if invNRe > 1:
+        return 64
+    elif invNRe > 0.000333333:
+        return 64*invNRe
+    else:
+        eod = 0.27027027*e_over_d
+        psi1 = -2 * math.log10(eod + 12*invNRe)
+        psi2 = -2 * math.log10(eod + 2.51*psi1*invNRe)
+        psi3 = -2 * math.log10(eod + 2.51*psi2*invNRe)
+        invsqrtf = psi1 - (psi2-psi1)*(psi2-psi1)/(psi3-2*psi2+psi1)
+        return 1/(invsqrtf*invsqrtf)
+
+def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
+    e_over_d = roughness / diameter
+    invNRe = viscosity / (diameter * velocity * density)
+    if invNRe > 1:
+        return 64
+    elif invNRe > 0.000333333:
+        return 64*invNRe
+    else:
+        eod = 0.27027027*e_over_d
+        psi1 = -2 * math.log10(eod + 12*invNRe)
+        psi2 = -2 * math.log10(eod + 2.51*psi1*invNRe)
+        invsqrtf = 4.781 - (psi1-4.781)*(psi1-4.781)/(psi2-2*psi1+4.781)
+        return 1/(invsqrtf*invsqrtf)
+
+def fdmodel_eck(velocity, density, viscosity, diameter, roughness):
+    e_over_d = roughness / diameter
+    invNRe = viscosity / (diameter * velocity * density)
+    if invNRe > 1:
+        return 64
+    elif invNRe > 0.000333333:
+        return 64*invNRe
+    else:
+        invsqrtf = -2 * math.log10(0.269179004*e_over_d + 15*invNRe)
+        return 1/(invsqrtf*invsqrtf)
 
 
 class SubmergedArcFurnace():
@@ -221,7 +257,7 @@ class SubmergedArcFurnace():
     def calc_dt(self, dt):
         activearea = (self.activeareafraction 
                       * 0.25*pi*self.furnacediameter**2)
-        mdotmetal_in = (POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
+        mdotmetal_in = (_POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
                         / self.metalSER)
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
