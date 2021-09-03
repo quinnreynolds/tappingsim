@@ -131,10 +131,8 @@ class SimpleSAF():
         None.
 
         """
-        dts = times[1:] - times[:-1]
         # TODO also initialise return arrays containing state vars during run
-        for dt in dts:
-            self.furnace.calc_dt(dt)      
+        self.furnace.calc_time_period(times)      
         deltat = times[-1] - times[0]
         self.timetotaliser += deltat
         self.powertotaliserkWh += deltat * (POWER_TIME_FACTOR 

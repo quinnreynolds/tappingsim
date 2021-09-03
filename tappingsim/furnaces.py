@@ -279,6 +279,33 @@ class SubmergedArcFurnace():
         self.vdotslag_out = vdotslag_out
         
     def calc_time_period(self, times):
-        # TODO
-        pass
+        params = (self.tapholediameter, self.tapholelength, self.tapholeheight,
+                  self.tapholeroughness, self.entrykl, self.bedmindiameter, 
+                  self.bedmaxdiameter, self.bedporosity, self.particlediameter,
+                  self.particlesphericity, self.densitymetal, self.densityslag,
+                  self.viscositymetal, self.viscosityslag, self.tapholeopen_yn,
+                  self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
+        areaconst = 1 / (self.bedporosity * self.activeareafraction 
+                         * 0.25*pi*self.furnacediameter**2)
+        mdotmetal_in = (_POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
+                        / self.metalSER)
+        vdotmetal_in = mdotmetal_in / self.densitymetal
+        vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
+        
+        dts = times[1:] - times[:-1]
+        hmetal, hslag = self.hmetal, self.hslag
+        for dt in dts:
+            vdotmetal_out, vdotslag_out = self._calc_vdot_out(hmetal, hslag, 
+                                                              *params)
+            dhmetal = dt * areaconst * (vdotmetal_in-vdotmetal_out)
+            dhslag = dt * areaconst * (vdotslag_in-vdotslag_out)
+            hmetal += dhmetal
+            hslag += dhmetal + dhslag
+        
+        self.hmetal = hmetal
+        self.hslag = hslag
+        self.vdotmetal_out = vdotmetal_out
+        self.vdotslag_out = vdotslag_out
+        
+        
         
