@@ -127,14 +127,17 @@ class SubmergedArcFurnace():
         self.hslag = hslag_init
         self.allownegativeheights_yn = False
         self.tapholeopen_yn = False
+        self.umetal = 0
+        self.uslag = 0
     
-    def _calc_vdot_out(self, hmetal, hslag, tapholediameter, tapholelength, 
-                       tapholeheight, tapholeroughness, entrykl, 
-                       bedmindiameter, bedmaxdiameter, bedporosity, 
-                       particlediameter, particlesphericity, densitymetal, 
-                       densityslag, viscositymetal, viscosityslag, 
-                       tapholeopen_yn, allownegativeheights_yn, bedmodel, 
-                       fdmodel):
+    def _calc_vdot_out(self, hmetal, hslag, umetal0, uslag0, 
+                       tapholediameter, tapholelength, tapholeheight, 
+                       tapholeroughness, entrykl, bedmindiameter, 
+                       bedmaxdiameter, bedporosity, particlediameter, 
+                       particlesphericity, densitymetal, densityslag, 
+                       viscositymetal, viscosityslag, tapholeopen_yn, 
+                       allownegativeheights_yn, bedmodel, fdmodel):
+        umetal, uslag, vdotmetal_out, vdotslag_out = 0, 0, 0, 0
         if tapholeopen_yn:
             rt = 0.5 * tapholediameter
             a_m = 0.5 * (1 + entrykl) * densitymetal
@@ -186,7 +189,7 @@ class SubmergedArcFurnace():
                     pa = g * (densityslag*(hs-hm) + densitymetal*hm)
             
             # calculate phase velocities
-            converged, umetal, uslag = 1, 1, 1
+            converged, umetal, uslag = 1, umetal0, uslag0
             while converged > 1e-6:
                 fdm = fdmodel(umetal, densitymetal, viscositymetal, 
                               tapholediameter, tapholeroughness)
@@ -200,7 +203,7 @@ class SubmergedArcFurnace():
                 nvs = (-b_s+math.sqrt(b_s*b_s + 4*pa*a_sc)) / (2*a_sc)
                 converged = abs(nvm-umetal) + abs(nvs-uslag)
                 umetal, uslag = nvm, nvs
-                
+            
             # interface deformations
             h0_l = (-rt - densityslag*uslag*uslag 
                     / (8*g*(densitymetal-densityslag)))
@@ -241,20 +244,18 @@ class SubmergedArcFurnace():
                     theta = 2 * math.acos(-hi/rt)
                     area_m = 0.5 * rt*rt * (theta - math.sin(theta))
                     area_s = pi * rt*rt - area_m                
+            if not allownegativeheights_yn:
+                if hslag <= 0:
+                    uslag = 0
+                if hmetal <= 0:
+                    umetal = 0
             vdotmetal_out = area_m * umetal
             vdotslag_out = area_s * uslag
             
-            if not allownegativeheights_yn:
-                if hslag <= 0:
-                    vdotslag_out = 0
-                if hmetal <= 0:
-                    vdotmetal_out = 0, 0
-        else:
-            vdotmetal_out, vdotslag_out = 0, 0
-        
-        return vdotmetal_out, vdotslag_out
+        return umetal, uslag, vdotmetal_out, vdotslag_out
 
     def calc_dt(self, dt):
+        dtf = float(dt)
         activearea = (self.activeareafraction 
                       * 0.25*pi*self.furnacediameter**2)
         mdotmetal_in = (_POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
@@ -262,23 +263,24 @@ class SubmergedArcFurnace():
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         
-        vdotmetal_out, vdotslag_out = self._calc_vdot_out(self.hmetal, 
-            self.hslag, self.tapholediameter, self.tapholelength, 
-            self.tapholeheight, self.tapholeroughness, self.entrykl, 
-            self.bedmindiameter, self.bedmaxdiameter, self.bedporosity, 
-            self.particlediameter, self.particlesphericity, self.densitymetal, 
-            self.densityslag, self.viscositymetal, self.viscosityslag, 
-            self.tapholeopen_yn, self.allownegativeheights_yn, 
-            self.bedmodel, self.fdmodel)
+        umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
+            self.hmetal, self.hslag, self.umetal, self.uslag, 
+            self.tapholediameter, self.tapholelength, self.tapholeheight, 
+            self.tapholeroughness, self.entrykl, self.bedmindiameter, 
+            self.bedmaxdiameter, self.bedporosity, self.particlediameter, 
+            self.particlesphericity, self.densitymetal, self.densityslag, 
+            self.viscositymetal, self.viscosityslag, self.tapholeopen_yn, 
+            self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
         
-        dhmetal = dt*(vdotmetal_in-vdotmetal_out)/(activearea*self.bedporosity)
-        dhslag = dt*(vdotslag_in-vdotslag_out)/(activearea*self.bedporosity)
+        dhmetal = dtf*(vdotmetal_in-vdotmetal_out)/(activearea*self.bedporosity)
+        dhslag = dtf*(vdotslag_in-vdotslag_out)/(activearea*self.bedporosity)
         self.hmetal += dhmetal
         self.hslag += dhmetal + dhslag
-        self.vdotmetal_out = vdotmetal_out
-        self.vdotslag_out = vdotslag_out
+        self.umetal, self.uslag = umetal, uslag
+        self.vdotmetal_out, self.vdotslag_out = vdotmetal_out, vdotslag_out
         
     def calc_time_period(self, times):
+        dts = [float(tm2-tm1) for tm1, tm2 in zip(times[:-1], times[1:])]
         params = (self.tapholediameter, self.tapholelength, self.tapholeheight,
                   self.tapholeroughness, self.entrykl, self.bedmindiameter, 
                   self.bedmaxdiameter, self.bedporosity, self.particlediameter,
@@ -292,20 +294,19 @@ class SubmergedArcFurnace():
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         
-        dts = times[1:] - times[:-1]
         hmetal, hslag = self.hmetal, self.hslag
+        umetal, uslag = 1, 1
         for dt in dts:
-            vdotmetal_out, vdotslag_out = self._calc_vdot_out(hmetal, hslag, 
-                                                              *params)
+            umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
+                hmetal, hslag, umetal, uslag, *params)
             dhmetal = dt * areaconst * (vdotmetal_in-vdotmetal_out)
             dhslag = dt * areaconst * (vdotslag_in-vdotslag_out)
             hmetal += dhmetal
             hslag += dhmetal + dhslag
         
-        self.hmetal = hmetal
-        self.hslag = hslag
-        self.vdotmetal_out = vdotmetal_out
-        self.vdotslag_out = vdotslag_out
+        self.hmetal, self.hslag = hmetal, hslag
+        self.umetal, self.uslag = umetal, uslag
+        self.vdotmetal_out, self.vdotslag_out = vdotmetal_out, vdotslag_out
         
         
         
