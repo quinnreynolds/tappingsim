@@ -132,13 +132,11 @@ class SimpleSAF():
 
         """
         # TODO also initialise return arrays containing state vars during run
-        self.furnace.calc_time_period(times)      
+        mm, sm = self.furnace.calc_time_period(times)      
         deltat = times[-1] - times[0]
         self.timetotaliser += deltat
         self.powertotaliserkWh += deltat * (POWER_TIME_FACTOR 
                                             * self.furnace.powerMVA 
                                             * self.furnace.powerfactor)
-        self.metalmasstotaliser += deltat * (self.furnace.vdotmetal_out 
-                                             * self.furnace.densitymetal)
-        self.slagmasstotaliser += deltat * (self.furnace.vdotslag_out 
-                                            * self.furnace.densityslag)
+        self.metalmasstotaliser += mm
+        self.slagmasstotaliser += sm

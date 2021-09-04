@@ -299,6 +299,7 @@ class SubmergedArcFurnace():
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         
+        metalmassout, slagmassout = 0, 0
         hmetal, hslag, umetal, uslag = self.hmetal, self.hslag, 1, 1
         for dt in dts:
             umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
@@ -307,10 +308,13 @@ class SubmergedArcFurnace():
             dhslag = dt * areaconst * (vdotslag_in-vdotslag_out)
             hmetal += dhmetal
             hslag += dhmetal + dhslag
+            metalmassout += dt * (vdotmetal_out * params[10])
+            slagmassout += dt * (vdotslag_out * params[11])
         
         self.hmetal, self.hslag = hmetal, hslag
         self.umetal, self.uslag = umetal, uslag
         self.vdotmetal_out, self.vdotslag_out = vdotmetal_out, vdotslag_out
         
+        return metalmassout, slagmassout
         
         
