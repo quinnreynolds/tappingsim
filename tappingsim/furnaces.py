@@ -53,6 +53,8 @@ def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
             * 0.88 * math.log(3.41*d_over_e) ** (2*(a-1)*(1-b)))
 
 def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
+    if velocity < 1e-6:
+        return 64
     e_over_d = roughness / diameter
     invNRe = viscosity / (diameter * velocity * density)
     if invNRe > 1:
@@ -68,6 +70,8 @@ def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
         return 1/(invsqrtf*invsqrtf)
 
 def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
+    if velocity < 1e-6:
+        return 64
     e_over_d = roughness / diameter
     invNRe = viscosity / (diameter * velocity * density)
     if invNRe > 1:
@@ -82,6 +86,8 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
         return 1/(invsqrtf*invsqrtf)
 
 def fdmodel_eck(velocity, density, viscosity, diameter, roughness):
+    if velocity < 1e-6:
+        return 64
     e_over_d = roughness / diameter
     invNRe = viscosity / (diameter * velocity * density)
     if invNRe > 1:
@@ -190,10 +196,6 @@ class SubmergedArcFurnace():
             
             # calculate phase velocities
             converged, umetal, uslag = 1, umetal0, uslag0
-            if umetal < 1e-6:
-                umetal = 1e-6
-            if uslag < 1e-6:
-                uslag = 1e-6
             while converged > 1e-6:
                 fdm = fdmodel(umetal, densitymetal, viscositymetal, 
                               tapholediameter, tapholeroughness)
