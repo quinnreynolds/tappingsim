@@ -59,10 +59,9 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
         NRe = 1
     a = 1 / (1 + (0.000367647*NRe) ** 9)
     b = 1 / (1 + (0.00625*NRe/d_over_e) ** 2)
-    invf = ((0.015625*NRe) ** a 
-            * (1.8 * math.log10(0.147058824*NRe)) ** (2*(1-a)*b) 
-            * (2.0 * math.log10(3.7*d_over_e)) ** (2*(1-a)*(1-b)))
-    return 1 / invf
+    return ((0.015625*NRe) ** (-a) 
+            * (1.8 * math.log10(0.147058824*NRe)) ** (2*(a-1)*b) 
+            * (2.0 * math.log10(3.7*d_over_e)) ** (2*(a-1)*(1-b)))
 
 def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
     if velocity < 1e-6:
