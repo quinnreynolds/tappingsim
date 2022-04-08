@@ -1,4 +1,5 @@
 import numpy
+
 POWER_TIME_FACTOR = 1000/3600
 
 class FeMnSAF():
@@ -92,12 +93,50 @@ class SimpleSAF():
         self.reset_mass_totaliser()
         
     def calc_dt(self, dt):
+        """
+        Integrate model over a single time step.
+
+        Parameters
+        ----------
+        dt : float
+            Length of time step, in s.
+
+        Returns
+        -------
+        None.
+
+        """
         self.furnace.calc_dt(dt)    
         self.timetotaliser += dt
         self.powertotaliserkWh += dt * (POWER_TIME_FACTOR 
                                         * self.furnace.powerMVA 
                                         * self.furnace.powerfactor)
         self.metalmasstotaliser += dt * (self.furnace.vdotmetal_out 
-                                         * self.furnace.densitymetal)
+                                          * self.furnace.densitymetal)
         self.slagmasstotaliser += dt * (self.furnace.vdotslag_out 
-                                         * self.furnace.densityslag)
+                                          * self.furnace.densityslag)
+
+    def calc_time_period(self, times):
+        """
+        Integrate model over a series of time steps. The model parameters are 
+        assumed to remain fixed during this period.
+
+        Parameters
+        ----------
+        times : 1D numpy array
+            Time steps at which to perform calculation, in s.
+
+        Returns
+        -------
+        None.
+
+        """
+        # TODO also initialise return arrays containing state vars during run
+        mm, sm = self.furnace.calc_time_period(times)      
+        deltat = times[-1] - times[0]
+        self.timetotaliser += deltat
+        self.powertotaliserkWh += deltat * (POWER_TIME_FACTOR 
+                                            * self.furnace.powerMVA 
+                                            * self.furnace.powerfactor)
+        self.metalmasstotaliser += mm
+        self.slagmasstotaliser += sm
