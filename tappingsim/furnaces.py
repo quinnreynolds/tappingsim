@@ -222,7 +222,7 @@ class SubmergedArcFurnace():
                 umetal, uslag = nvm, nvs
             
             # interface deformations
-            pcorr = porosity ** 2
+            pcorr = self.bedporosity ** 2
             h0_l = (-rt - densityslag*uslag*uslag 
                     / (8*g*pcorr*(densitymetal-densityslag)))
             h0_h = (rt + densitymetal*umetal*umetal 
