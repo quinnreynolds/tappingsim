@@ -1,8 +1,6 @@
 import math
 from scipy.constants import g, pi
 
-_POWER_TIME_FACTOR = 1000/3600
-
 def bedmodel_carmenkozeny(tapholediameter, bedmindiameter, bedmaxdiameter,
                           bedparticlediameter, bedparticlesphericity, 
                           bedporosity, viscosity, density):
@@ -277,8 +275,7 @@ class SubmergedArcFurnace():
         #              * 0.25*pi*self.furnacediameter**2)
         areaconst = 1 / (self.bedporosity * self.activeareafraction 
                          * 0.25*pi*self.furnacediameter**2)
-        mdotmetal_in = (_POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
-                        / self.metalSER)
+        mdotmetal_in = (self.powerMVA * self.powerfactor / (3.6*self.metalSER))
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         
@@ -308,8 +305,7 @@ class SubmergedArcFurnace():
                   self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
         areaconst = 1 / (self.bedporosity * self.activeareafraction 
                          * 0.25*pi*self.furnacediameter**2)
-        mdotmetal_in = (_POWER_TIME_FACTOR * self.powerMVA * self.powerfactor 
-                        / self.metalSER)
+        mdotmetal_in = (self.powerMVA * self.powerfactor / (3.6*self.metalSER))
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in*self.slagmetalmassratio / self.densityslag
         

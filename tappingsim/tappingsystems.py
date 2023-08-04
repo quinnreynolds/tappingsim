@@ -1,7 +1,5 @@
 import numpy
 
-POWER_TIME_FACTOR = 1000/3600
-
 
 class SAF():
     def __init__(self, furnace):
@@ -48,9 +46,8 @@ class SAF():
         """
         self.furnace.calc_dt(dt)    
         self.timetotaliser += dt
-        self.powertotaliserkWh += dt * (POWER_TIME_FACTOR 
-                                        * self.furnace.powerMVA 
-                                        * self.furnace.powerfactor)
+        self.powertotaliserkWh += dt * (self.furnace.powerMVA 
+                                        * self.furnace.powerfactor / 3.6)
         self.metalmasstotaliser += dt * (self.furnace.vdotmetal_out 
                                           * self.furnace.densitymetal)
         self.slagmasstotaliser += dt * (self.furnace.vdotslag_out 
@@ -75,9 +72,8 @@ class SAF():
         mm, sm = self.furnace.calc_time_period(times)      
         deltat = times[-1] - times[0]
         self.timetotaliser += deltat
-        self.powertotaliserkWh += deltat * (POWER_TIME_FACTOR 
-                                            * self.furnace.powerMVA 
-                                            * self.furnace.powerfactor)
+        self.powertotaliserkWh += deltat * (self.furnace.powerMVA 
+                                            * self.furnace.powerfactor / 3.6)
         self.metalmasstotaliser += mm
         self.slagmasstotaliser += sm
 
@@ -134,9 +130,8 @@ class SAFWithLadles():
                 lnext.calc_dt(dt, lprev.vdotmetal_out, lprev.vdotslag_out)
 
         self.timetotaliser += dt
-        self.powertotaliserkWh += dt * (POWER_TIME_FACTOR 
-                                        * self.furnace.powerMVA 
-                                        * self.furnace.powerfactor)
+        self.powertotaliserkWh += dt * (self.furnace.powerMVA 
+                                        * self.furnace.powerfactor) / 3.6
         self.metalmasstotaliser += dt * (self.furnace.vdotmetal_out 
                                          * self.furnace.densitymetal)
         self.slagmasstotaliser += dt * (self.furnace.vdotslag_out 
