@@ -17,7 +17,7 @@ def get_version(rel_path):
 
 setup(name='tappingsim',
       version=get_version('tappingsim/__init__.py'),
-      description="""Semi-empirical simulator for furnace tapping systems""",
+      description="""Reduced-order modelling of furnace tapping systems""",
       url='https://github.com/quinnreynolds/tappingsim',
       author='Quinn Reynolds',
       author_email='quinnr@mintek.co.za',
