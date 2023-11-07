@@ -7,7 +7,6 @@
 __version__ = '0.6'
 
 from . import cite
-from . import coldmodels
 from . import furnaces
 from . import launders
 from . import ladles
