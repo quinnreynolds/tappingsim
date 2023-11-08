@@ -271,8 +271,6 @@ class SubmergedArcFurnace():
         return umetal, uslag, vdotmetal_out, vdotslag_out
 
     def calc_dt(self, dt):
-        #activearea = (self.activeareafraction 
-        #              * 0.25*pi*self.furnacediameter**2)
         areaconst = 1 / (self.bedporosity * self.activeareafraction 
                          * 0.25*pi*self.furnacediameter**2)
         mdotmetal_in = (self.powerMVA * self.powerfactor / (3.6*self.metalSER))

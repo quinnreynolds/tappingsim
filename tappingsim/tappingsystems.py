@@ -10,22 +10,40 @@ class SAF():
         self.slagmasstotaliser = 0
     
     def open_taphole(self):
+        """
+        Set furnace tap-hole to open
+        """
         self.furnace.tapholeopen_yn = True
         
     def close_taphole(self):
+        """
+        Set furnace tap-hole to closed.
+        """
         self.furnace.tapholeopen_yn = False
     
     def reset_time_totaliser(self):
+        """
+        Reset time totaliser counter to zero.
+        """
         self.timetotaliser = 0
         
     def reset_power_totaliser(self):
+        """
+        Reset power totaliser counter to zero.
+        """
         self.powertotaliserkWh = 0
         
     def reset_mass_totaliser(self):
+        """
+        Reset mass totaliser counters to zero.
+        """
         self.metalmasstotaliser = 0
         self.slagmasstotaliser = 0
     
     def reset_all_totalisers(self):
+        """
+        Reset all totaliser counters to zero.
+        """
         self.reset_time_totaliser()
         self.reset_power_totaliser()
         self.reset_mass_totaliser()
@@ -42,7 +60,6 @@ class SAF():
         Returns
         -------
         None.
-
         """
         self.furnace.calc_dt(dt)    
         self.timetotaliser += dt
@@ -66,9 +83,7 @@ class SAF():
         Returns
         -------
         None.
-
         """
-        # TODO also initialise return arrays containing state vars during run
         mm, sm = self.furnace.calc_time_period(times)      
         deltat = times[-1] - times[0]
         self.timetotaliser += deltat
@@ -91,26 +106,66 @@ class SAFWithLadles():
         self.slagmasstotaliser = 0
 
     def open_taphole(self):
+        """
+        Set furnace tap-hole to open.
+        """
         self.furnace.tapholeopen_yn = True
         
     def close_taphole(self):
+        """
+        Set furnace tap-hole to closed.
+        """
         self.furnace.tapholeopen_yn = False
 
     def empty_ladles(self):
+        """
+        Set slag and metal levels in all ladles to zero.
+        """
         for ldl in self.ladles:
             ldl.hmetal, ldl.hslag = 0, 0
             
     def reset_time_totaliser(self):
+        """
+        Reset time totaliser counter to zero.
+        """
         self.timetotaliser = 0
         
     def reset_power_totaliser(self):
+        """
+        Reset power totaliser counter to zero.
+        """
         self.powertotaliserkWh = 0
         
     def reset_mass_totaliser(self):
+        """
+        Reset mass totaliser counters to zero.
+        """
         self.metalmasstotaliser = 0
         self.slagmasstotaliser = 0
+
+    def reset_all_totalisers(self):
+        """
+        Reset all totaliser counters to zero.
+        """
+        self.reset_time_totaliser()
+        self.reset_power_totaliser()
+        self.reset_mass_totaliser()
         
     def ladle_masses(self):
+        """
+        Calculate masses of metal and slag in each ladle.
+
+        Parameters
+        ----------
+        None.
+        
+        Returns
+        -------
+        metalmasses : list of float
+            Mass of metal in each ladle, in kg.
+        slagmasses : list of float
+            Mass of slag in each ladle, in kg.
+        """
         metalmasses, slagmasses = [], []
         for ldl in self.ladles:
             area = numpy.pi * 0.25 * ldl.diameter**2
@@ -120,6 +175,18 @@ class SAFWithLadles():
         return metalmasses, slagmasses
     
     def calc_dt(self, dt):
+        """
+        Integrate model over a single time step.
+
+        Parameters
+        ----------
+        dt : float
+            Length of time step, in s.
+
+        Returns
+        -------
+        None.
+        """
         self.furnace.calc_dt(dt)
         if self.furnace.tapholeopen_yn:
             self.launder.calc_dt(dt, self.furnace.vdotmetal_out, 
