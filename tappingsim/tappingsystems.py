@@ -3,6 +3,27 @@ import numpy
 
 class SAF():
     def __init__(self, furnace):
+        """Wrapper class for creating a submerged-arc furnace tapping system 
+        simulator object. This system contains only the furnace.
+        
+        Parameters
+        ----------
+        furnace : object
+            An instance of the SubmergedArcFurnace class.
+            
+        Attributes
+        ----------
+        furnace : object
+            A reference to the provided furnace object.
+        timetotaliser : float
+            A running counter for time, in s.
+        powertotaliserkwh : float
+            A running counter for energy input to the furnace, in kWh.
+        metalmasstotaliser : float
+            A running counter of metal tapped from the furnace, in kg.
+        slagmasstotaliser : float
+            A running counter of slag tapped from the furnace, in kg.
+        """        
         self.furnace = furnace
         self.timetotaliser = 0
         self.powertotaliserkWh = 0
@@ -11,7 +32,7 @@ class SAF():
     
     def open_taphole(self):
         """
-        Set furnace tap-hole to open
+        Set furnace tap-hole to open.
         """
         self.furnace.tapholeopen_yn = True
         
@@ -50,7 +71,7 @@ class SAF():
         
     def calc_dt(self, dt):
         """
-        Integrate model over a single time step.
+        Integrate simulator state forward over a single time step.
 
         Parameters
         ----------
@@ -70,36 +91,44 @@ class SAF():
         self.slagmasstotaliser += dt * (self.furnace.vdotslag_out 
                                           * self.furnace.densityslag)
 
-    def calc_time_period(self, times):
-        """
-        Integrate model over a series of time steps. The model parameters are 
-        assumed to remain fixed during this period.
-
-        Parameters
-        ----------
-        times : 1D numpy array
-            Time steps at which to perform calculation, in s.
-
-        Returns
-        -------
-        None.
-        """
-        mm, sm = self.furnace.calc_time_period(times)      
-        deltat = times[-1] - times[0]
-        self.timetotaliser += deltat
-        self.powertotaliserkWh += deltat * (self.furnace.powerMVA 
-                                            * self.furnace.powerfactor / 3.6)
-        self.metalmasstotaliser += mm
-        self.slagmasstotaliser += sm
-
 
 class SAFWithLadles():
-    def __init__(self, furnace, launder, ladles, taptotaptime, tappingtime):
+    def __init__(self, furnace, launder, ladles):
+        """Wrapper class for creating a submerged-arc furnace tapping system 
+        simulator object. This system contains the furnace, a transfer launder, 
+        and an arbitrary number of ladles in series.
+        
+        Parameters
+        ----------
+        furnace : object
+            An instance of the SubmergedArcFurnace class or equivalent.
+        launder : object
+            An instance of the SimpleSiSoLaunder class or equivalent.
+        ladles: list of object
+            A list of instances of the CylindricalLadle class or equivalent.
+            
+        Attributes
+        ----------
+        furnace : object
+            A reference to the provided furnace object.
+        launder : object
+            A reference to the provided launder object.
+        ladles: list of object
+            A reference to the provided list of ladle objects.
+        timetotaliser : float
+            A running counter for time, in s.
+        powertotaliserkwh : float
+            A running counter for energy input to the furnace, in kWh.
+        metalmasstotaliser : float
+            A running counter of metal tapped from the furnace, in kg.
+        slagmasstotaliser : float
+            A running counter of slag tapped from the furnace, in kg.
+        tapholeopen_yn : boolean
+            Indicate whether furnace tap-hole is open (True) or closed (False).
+        """        
         self.furnace = furnace
         self.launder = launder
         self.ladles = ladles
-        self.taptotaptime = taptotaptime
-        self.tappingtime = tappingtime
         self.timetotaliser = 0
         self.powertotaliserkWh = 0
         self.metalmasstotaliser = 0
@@ -176,7 +205,7 @@ class SAFWithLadles():
     
     def calc_dt(self, dt):
         """
-        Integrate model over a single time step.
+        Integrate simulator state forward over a single time step.
 
         Parameters
         ----------

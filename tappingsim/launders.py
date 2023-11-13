@@ -1,8 +1,41 @@
 class SimpleSisoLaunder():
     def __init__(self):
+        """Tapping launder class. This version is a simple single-in-single-out
+        launder channel with no hold-up or accumulation effects.
+        
+        Parameters
+        ----------
+        None.
+                    
+        Attributes
+        ----------
+        vdotmetal_out : float
+            The output metal flowrate from the launder in the current state, 
+            kg/s
+        vdotslag_out : float
+            The output slag flowrate from the launder in the current state, 
+            kg/s
+        """        
         self.vdotmetal_out = 0
         self.vdotslag_out = 0
             
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
+        """
+        Integrate object state forward over a single time step, and update 
+        output flowrates.
+
+        Parameters
+        ----------
+        dt : float
+            Length of time step, in s.
+        vdotmetal_in : float
+            Flowrate of metal into the launder, kg/s.
+        vdotslag_in : float
+            Flowrate of slag into the launder, kg/s.
+
+        Returns
+        -------
+        None.
+        """
         self.vdotmetal_out = vdotmetal_in
         self.vdotslag_out = vdotslag_in
