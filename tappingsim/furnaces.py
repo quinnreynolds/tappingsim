@@ -44,8 +44,8 @@ def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
     tuple of float
         A and B constants in pressure drop expression.
         
-    Notes
-    -----
+    Note
+    ----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Kozeny-Carman 
     correlation is valid for laminar flow conditions only. [1]_ [2]_
     
@@ -55,6 +55,7 @@ def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
        Akad. Wiss., Wien, 136(2a): 271-306, 1927.
     .. [2] P.C. Carman, Fluid flow through granular beds. Transactions, 
        Institution of Chemical Engineers, London, 15: 150-166, 1937.
+
     """
     rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
@@ -103,8 +104,8 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
     tuple of float
         A and B constants in pressure drop expression.
         
-    Notes
-    -----
+    Note
+    ----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Ergun correlation is 
     valid for both laminar and turbulent flow regimes. [1]_
     
@@ -152,8 +153,8 @@ def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
     float
         The Darcy friction factor for the tap-hole channel.
         
-    Notes
-    -----
+    Note
+    ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Bellos et al 
     correlation is valid in all flow regimes including transitional flow. [1]_ 
     [2]_
@@ -199,8 +200,8 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
     float
         The Darcy friction factor for the tap-hole channel.
         
-    Notes
-    -----
+    Note
+    ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Cheng 
     correlation is valid in all flow regimes including transitional flow. [1]_
     
@@ -241,8 +242,8 @@ def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
     float
         The Darcy friction factor for the tap-hole channel.
         
-    Notes
-    -----
+    Note
+    ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides 
     correlation is valid for laminar and turbulent flow regimes. [1]_
     
@@ -289,8 +290,8 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
     float
         The Darcy friction factor for the tap-hole channel.
         
-    Notes
-    -----
+    Note
+    ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides 
     correlation is valid laminar and turbulent flow regimes. [1]_
     
@@ -450,8 +451,8 @@ class SubmergedArcFurnace():
     uslag : float
         The current velocity of slag through the tap-hole, m/s
         
-    Notes
-    -----
+    Note
+    ----
     This model is based on the formulation by Olsen & Reynolds. [1]_
     
     References
@@ -460,6 +461,7 @@ class SubmergedArcFurnace():
         Drainage While Tapping Slag and Metal Through a Single Tap-Hole. 
         Metallurgical and Materials Transactions B 51(4): 1750-1759, 2020. 
         doi:10.1007/s11663-020-01873-1.
+        
     """
     
     def __init__(self, powerMVA, powerfactor, metalSER, slagmetalmassratio, 
@@ -635,6 +637,7 @@ class SubmergedArcFurnace():
         Returns
         -------
         None.
+        
         """
         areaconst = 1 / (self.bedporosity * self.activeareafraction 
                          * 0.25*pi*self.furnacediameter**2)
@@ -673,7 +676,12 @@ class SubmergedArcFurnace():
 
         Returns
         -------
-        None.
+        metalmassout : float
+            The mass of metal removed from the furnace during the time period, 
+            kg
+        slagmassout : float
+            The mass of slag removed from the furnace during the time period, kg
+        
         """
         dts = [float(dt) for dt in times[1:]-times[:-1]]
         params = (self.tapholediameter, self.tapholelength, self.tapholeheight,

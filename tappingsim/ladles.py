@@ -29,12 +29,13 @@ def overflowmodel_step(interfacedeltah, *consts):
     float
         Metal volume fraction in slag outlet stream.
         
-    Notes
-    -----
+    Note
+    ----
     This model describes perfectly separated phase model with no metal 
     entrainment into the slag phase.
 
     Fraction = 0
+    
     """
     return 0
 
@@ -56,8 +57,8 @@ def overflowmodel_exp(interfacedeltah, *consts):
     float
         Metal volume fraction in slag outlet stream.
 
-    Notes
-    -----
+    Note
+    ----
     This model describes an exponential decay of metal entrainment as a 
     function of the position of the interface relative to the outlet. [1]_
     
@@ -70,6 +71,7 @@ def overflowmodel_exp(interfacedeltah, *consts):
        Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
        International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
        SSRN: doi:10.2139/ssrn.3926222 or https://ssrn.com/abstract=3926222.
+       
     """
     if interfacedeltah > 0:
         return consts[0]*numpy.exp(-consts[1]*interfacedeltah)
@@ -112,6 +114,7 @@ class CylindricalLadle():
         The current outlet volume flowrate of metal from the unit, m3/s.
     vdotslag_out : float
         The current outlet volume flowrate of slag from the unit, m3/s.
+        
     """
     
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
@@ -157,6 +160,7 @@ class CylindricalLadle():
         Returns
         -------
         None.
+        
         """
         xarea = 0.25 * pi * self.diameter**2
         dhmetal = dt*vdotmetal_in / xarea
