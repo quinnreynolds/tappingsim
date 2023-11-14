@@ -1,12 +1,8 @@
-# Furnace tapping simulator, base module information
-#
-# Authors: 
-#  Quinn Reynolds (Pyrometallurgy Division, Mintek)
-#  Jan Erik Olsen (Flow Technology, SINTEF Industri)
+"""A set of tools for simulation of metallurgical furnace tapping problems.
+"""
 
 __version__ = '0.6'
 
-from . import cite
 from . import furnaces
 from . import launders
 from . import ladles
