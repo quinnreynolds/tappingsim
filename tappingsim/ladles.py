@@ -61,8 +61,6 @@ def overflowmodel_exp(interfacedeltah, *consts):
     This model describes an exponential decay of metal entrainment as a 
     function of the position of the interface relative to the outlet. [1]_
     
-    .. math:: f=C_0 exp ( -C_1 \delta_h )
-    
     Fraction = consts[0]*exp(-consts[1]*interfacedeltah) if interfacedeltah > 0
              = consts[0]                                 if interfacedeltah < 0
     
@@ -72,7 +70,6 @@ def overflowmodel_exp(interfacedeltah, *consts):
        Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
        International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
        SSRN: doi:10.2139/ssrn.3926222 or https://ssrn.com/abstract=3926222.
-       .
     """
     if interfacedeltah > 0:
         return consts[0]*numpy.exp(-consts[1]*interfacedeltah)

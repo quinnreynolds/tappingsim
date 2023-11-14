@@ -2,8 +2,8 @@
 
 Metallurgical furnaces typically produce one or more immiscible molten phase, 
 and do so continuously provided the furnace is supplied with power and feed 
-material. The molten products are generally removed by tapping through one or 
-more tap-holes.
+material. The molten products are removed from the vessel by tapping through 
+one or more tap-holes.
 
 This module also includes support functions for describing flow drag effects in 
 packed beds and tap-hole channels.
