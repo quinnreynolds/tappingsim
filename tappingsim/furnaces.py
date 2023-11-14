@@ -36,14 +36,12 @@ def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
     Notes
     -----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Kozeny-Carman 
-    equation is valid for laminar flow conditions only [1]_ [2]_
+    equation is valid for laminar flow conditions only. [1]_ [2]_
     
     References
     ----------
-    .. [1] J. Kozeny, Ueber kapillare Leitung des Wassers im Boden. 
-    Sitzungsber Akad. Wiss., Wien, 136(2a): 271-306, 1927.
-    .. [2] P.C. Carman, Fluid flow through granular beds. Transactions, 
-    Institution of Chemical Engineers, London, 15: 150-166, 1937.
+    .. [1] J. Kozeny, Ueber kapillare Leitung des Wassers im Boden. Sitzungsber Akad. Wiss., Wien, 136(2a): 271-306, 1927.
+    .. [2] P.C. Carman, Fluid flow through granular beds. Transactions, Institution of Chemical Engineers, London, 15: 150-166, 1937.
     """
     rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
@@ -305,6 +303,151 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
 
 
 class SubmergedArcFurnace():
+    """Submerged-arc furnace class. This version assumes a slag and metal
+    smelting process, with a porous burden layer and a single tap-hole for
+    both phases.
+    
+    Parameters
+    ----------
+    powerMVA : float
+        The furnace power level, MVA.
+    powerfactor : float
+        The furnace power factor for conversion between VA and W.
+    metalSER : float
+        The specific energy requirement of the smelting process, MWh/ton 
+        metal produced.
+    slagmetalmassratio : float
+        The ratio of slag to metal produced during smelting.
+    furnacediameter : float
+        The furnace vessel inner diameter, m.
+    activeareafraction : float
+        The fraction of the cross-sectional area of the furnace vessel 
+        occupied by the molten bath.
+    tapholediameter : float
+        The diameter of the tap-hole channel, m.
+    tapholelength : float
+        The length of the tap-hole channel, m.
+    tapholeroughness : float
+        The roughness of the tap-hole channel surface.
+    tapholeheight : float
+        The position of the tap-hole centerline relative to the furnace 
+        hearth level, m.
+    densitymetal : float
+        Density of the molten metal phase, kg/m3.
+    densityslag : float
+        Density of the molten slag phase, kg/m3.
+    viscositymetal : float
+        Viscosity of the molten metal phase, Pa.s.
+    viscosityslag : float
+        Viscosity of the molten slag phase, Pa.s.
+    particlediameter : float
+        Diameter of the constituent particles of the burden layer, m.
+    particlesphericity : float
+        Sphericity of the constituent particles of the burden layer.
+    bedporosity : float
+        Porosity of the burden layer.
+    bedmindiameter : float
+        Diameter of cavity in burden in front of tap-hole, m (set to zero 
+        for no cavity).
+    bedmaxdiameter : float
+        Extent of burden from tap-hole, m (set to a high value for entire 
+        furnace).
+    bedmodel : float
+        Function to be used to model the pressure drop through the burden
+        section.
+    entrykl : float
+        Pressure loss coefficient to account for tap-hole entrance effects.
+    fdmodel : float
+        Function to be used to model the pressure drop through the tap-hole 
+        channel.
+    hmetal_init : float
+        The initial level of metal in the furnace, m.
+    hslag_init : float
+        The initial level of slag in the furnace, m.
+        
+    Attributes
+    ----------
+    powerMVA : float
+        The furnace power level, MVA.
+    powerfactor : float
+        The furnace power factor for conversion between VA and W.
+    metalSER : float
+        The specific energy requirement of the smelting process, MWh/ton 
+        metal produced.
+    slagmetalmassratio : float
+        The ratio of slag to metal produced during smelting.
+    furnacediameter : float
+        The furnace vessel inner diameter, m.
+    activeareafraction : float
+        The fraction of the cross-sectional area of the furnace vessel 
+        occupied by the molten bath.
+    tapholediameter : float
+        The diameter of the tap-hole channel, m.
+    tapholelength : float
+        The length of the tap-hole channel, m.
+    tapholeroughness : float
+        The roughness of the tap-hole channel surface.
+    tapholeheight : float
+        The position of the tap-hole centerline relative to the furnace 
+        hearth level, m.
+    densitymetal : float
+        Density of the molten metal phase, kg/m3.
+    densityslag : float
+        Density of the molten slag phase, kg/m3.
+    viscositymetal : float
+        Viscosity of the molten metal phase, Pa.s.
+    viscosityslag : float
+        Viscosity of the molten slag phase, Pa.s.
+    particlediameter : float
+        Diameter of the constituent particles of the burden layer, m.
+    particlesphericity : float
+        Sphericity of the constituent particles of the burden layer.
+    bedporosity : float
+        Porosity of the burden layer.
+    bedmindiameter : float
+        Diameter of cavity in burden in front of tap-hole, m (set to zero 
+        for no cavity).
+    bedmaxdiameter : float
+        Extent of burden from tap-hole, m (set to a high value for entire 
+        furnace).
+    bedmodel : float
+        Function to be used to model the pressure drop through the burden
+        section.
+    entrykl : float
+        Pressure loss coefficient to account for tap-hole entrance effects.
+    fdmodel : float
+        Function to be used to model the pressure drop through the tap-hole 
+        channel.
+    hmetal : float
+        The current level of metal in the furnace, m.
+    hslag : float
+        The current level of slag in the furnace, m.
+    allownegativeheights_yn : boolean
+        Whether or not to allow the slag or metal height to pass below the 
+        level of the hearth. Default is False.
+    tapholeopen_yn : boolean
+        Indicate whether furnace tap-hole is currently open (True) or 
+        closed (False).
+    vdotmetal_out : float
+        The current outlet volume flowrate of metal from the unit, m3/s.
+    vdotslag_out : float
+        The current outlet volume flowrate of slag from the unit, m3/s.
+    umetal : float
+        The current velocity of metal through the tap-hole, m/s
+    uslag : float
+        The current velocity of slag through the tap-hole, m/s
+        
+    Notes
+    -----
+    This model is based on the formulation by Olsen & Reynolds. [1]_
+    
+    References
+    ----------
+    .. [1] J.E. Olsen, Q.G. Reynolds, Mathematical Modeling of Furnace 
+        Drainage While Tapping Slag and Metal Through a Single Tap-Hole. 
+        Metallurgical and Materials Transactions B 51(4): 1750-1759, 2020. 
+        https://doi.org/10.1007/s11663-020-01873-1.
+    """
     def __init__(self, powerMVA, powerfactor, metalSER, slagmetalmassratio, 
                  furnacediameter, activeareafraction, tapholediameter, 
                  tapholelength, tapholeroughness, tapholeheight, densitymetal, 
@@ -312,151 +455,6 @@ class SubmergedArcFurnace():
                  particlesphericity, bedporosity, bedmindiameter, 
                  bedmaxdiameter, bedmodel, entrykl, fdmodel, hmetal_init, 
                  hslag_init):
-        """Submerged-arc furnace class. This version assumes a slag and metal
-        smelting process, with a porous burden layer and a single tap-hole for
-        both phases.
-        
-        Parameters
-        ----------
-        powerMVA : float
-            The furnace power level, MVA.
-        powerfactor : float
-            The furnace power factor for conversion between VA and W.
-        metalSER : float
-            The specific energy requirement of the smelting process, MWh/ton 
-            metal produced.
-        slagmetalmassratio : float
-            The ratio of slag to metal produced during smelting.
-        furnacediameter : float
-            The furnace vessel inner diameter, m.
-        activeareafraction : float
-            The fraction of the cross-sectional area of the furnace vessel 
-            occupied by the molten bath.
-        tapholediameter : float
-            The diameter of the tap-hole channel, m.
-        tapholelength : float
-            The length of the tap-hole channel, m.
-        tapholeroughness : float
-            The roughness of the tap-hole channel surface.
-        tapholeheight : float
-            The position of the tap-hole centerline relative to the furnace 
-            hearth level, m.
-        densitymetal : float
-            Density of the molten metal phase, kg/m3.
-        densityslag : float
-            Density of the molten slag phase, kg/m3.
-        viscositymetal : float
-            Viscosity of the molten metal phase, Pa.s.
-        viscosityslag : float
-            Viscosity of the molten slag phase, Pa.s.
-        particlediameter : float
-            Diameter of the constituent particles of the burden layer, m.
-        particlesphericity : float
-            Sphericity of the constituent particles of the burden layer.
-        bedporosity : float
-            Porosity of the burden layer.
-        bedmindiameter : float
-            Diameter of cavity in burden in front of tap-hole, m (set to zero 
-            for no cavity).
-        bedmaxdiameter : float
-            Extent of burden from tap-hole, m (set to a high value for entire 
-            furnace).
-        bedmodel : float
-            Function to be used to model the pressure drop through the burden
-            section.
-        entrykl : float
-            Pressure loss coefficient to account for tap-hole entrance effects.
-        fdmodel : float
-            Function to be used to model the pressure drop through the tap-hole 
-            channel.
-        hmetal_init : float
-            The initial level of metal in the furnace, m.
-        hslag_init : float
-            The initial level of slag in the furnace, m.
-            
-        Attributes
-        ----------
-        powerMVA : float
-            The furnace power level, MVA.
-        powerfactor : float
-            The furnace power factor for conversion between VA and W.
-        metalSER : float
-            The specific energy requirement of the smelting process, MWh/ton 
-            metal produced.
-        slagmetalmassratio : float
-            The ratio of slag to metal produced during smelting.
-        furnacediameter : float
-            The furnace vessel inner diameter, m.
-        activeareafraction : float
-            The fraction of the cross-sectional area of the furnace vessel 
-            occupied by the molten bath.
-        tapholediameter : float
-            The diameter of the tap-hole channel, m.
-        tapholelength : float
-            The length of the tap-hole channel, m.
-        tapholeroughness : float
-            The roughness of the tap-hole channel surface.
-        tapholeheight : float
-            The position of the tap-hole centerline relative to the furnace 
-            hearth level, m.
-        densitymetal : float
-            Density of the molten metal phase, kg/m3.
-        densityslag : float
-            Density of the molten slag phase, kg/m3.
-        viscositymetal : float
-            Viscosity of the molten metal phase, Pa.s.
-        viscosityslag : float
-            Viscosity of the molten slag phase, Pa.s.
-        particlediameter : float
-            Diameter of the constituent particles of the burden layer, m.
-        particlesphericity : float
-            Sphericity of the constituent particles of the burden layer.
-        bedporosity : float
-            Porosity of the burden layer.
-        bedmindiameter : float
-            Diameter of cavity in burden in front of tap-hole, m (set to zero 
-            for no cavity).
-        bedmaxdiameter : float
-            Extent of burden from tap-hole, m (set to a high value for entire 
-            furnace).
-        bedmodel : float
-            Function to be used to model the pressure drop through the burden
-            section.
-        entrykl : float
-            Pressure loss coefficient to account for tap-hole entrance effects.
-        fdmodel : float
-            Function to be used to model the pressure drop through the tap-hole 
-            channel.
-        hmetal : float
-            The current level of metal in the furnace, m.
-        hslag : float
-            The current level of slag in the furnace, m.
-        allownegativeheights_yn : boolean
-            Whether or not to allow the slag or metal height to pass below the 
-            level of the hearth. Default is False.
-        tapholeopen_yn : boolean
-            Indicate whether furnace tap-hole is currently open (True) or 
-            closed (False).
-        vdotmetal_out : float
-            The current outlet volume flowrate of metal from the unit, m3/s.
-        vdotslag_out : float
-            The current outlet volume flowrate of slag from the unit, m3/s.
-        umetal : float
-            The current velocity of metal through the tap-hole, m/s
-        uslag : float
-            The current velocity of slag through the tap-hole, m/s
-            
-        Notes
-        -----
-        This model is based on the formulation by Olsen & Reynolds. [1]_
-        
-        References
-        ----------
-        .. [1] J.E. Olsen, Q.G. Reynolds, Mathematical Modeling of Furnace 
-        Drainage While Tapping Slag and Metal Through a Single Tap-Hole. 
-        Metallurgical and Materials Transactions B 51(4): 1750-1759, 2020. 
-        https://doi.org/10.1007/s11663-020-01873-1.
-        """
         self.furnacediameter = furnacediameter
         self.activeareafraction = activeareafraction
         self.tapholediameter = tapholediameter

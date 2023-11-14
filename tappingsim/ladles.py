@@ -55,10 +55,10 @@ def overflowmodel_exp(interfacedeltah, *consts):
     References
     ----------
     .. [1] Q.G. Reynolds, J.E. Olsen, J.D. Steenkamp, Variability in Ferroalloy 
-    Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
-    International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
-    SSRN: https://ssrn.com/abstract=3926222 or 
-    http://dx.doi.org/10.2139/ssrn.3926222.
+       Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
+       International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
+       SSRN: https://ssrn.com/abstract=3926222 or 
+       http://dx.doi.org/10.2139/ssrn.3926222.
     """
     if interfacedeltah > 0:
         return consts[0]*numpy.exp(-consts[1]*interfacedeltah)
@@ -67,43 +67,43 @@ def overflowmodel_exp(interfacedeltah, *consts):
 
 
 class CylindricalLadle():
+    """Tapping ladle class. This version is a cylindrical ladle with an 
+    choice of empirical overflow models.
+    
+    Parameters
+    ----------
+    diameter : float
+        The internal diameter of the ladle, m.
+    depth : float
+        The internal depth of the ladle, m.
+    hmetal_init : float
+        The initial level of metal in the ladle, m.
+    hslag_init : float
+        The initial level of slag in the ladle, m.
+    overflowmodel : function
+        Function to be used to model the phase overflow behaviour.
+    overflowconsts : list of float
+        Empirical parameters for the chosen overflow model.
+            
+    Attributes
+    ----------
+    diameter : float
+        The internal diameter of the ladle, m.
+    depth : float
+        The internal depth of the ladle, m.
+    hmetal : float
+        The current level of metal in the ladle, m.
+    hslag : float
+        The current level of slag in the ladle, m.
+    overflowmodel : function
+        Reference to internal lambda function created for overflow modelling.
+    vdotmetal_out : float
+        The current outlet volume flowrate of metal from the unit, m3/s.
+    vdotslag_out : float
+        The current outlet volume flowrate of slag from the unit, m3/s.
+    """
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
                  overflowmodel, overflowconsts):
-        """Tapping ladle class. This version is a cylindrical ladle with an 
-        choice of empirical overflow models.
-        
-        Parameters
-        ----------
-        diameter : float
-            The internal diameter of the ladle, m.
-        depth : float
-            The internal depth of the ladle, m.
-        hmetal_init : float
-            The initial level of metal in the ladle, m.
-        hslag_init : float
-            The initial level of slag in the ladle, m.
-        overflowmodel : function
-            Function to be used to model the phase overflow behaviour.
-        overflowconsts : list of float
-            Empirical parameters for the chosen overflow model.
-                
-        Attributes
-        ----------
-        diameter : float
-            The internal diameter of the ladle, m.
-        depth : float
-            The internal depth of the ladle, m.
-        hmetal : float
-            The current level of metal in the ladle, m.
-        hslag : float
-            The current level of slag in the ladle, m.
-        overflowmodel : function
-            Internal lambda function created for overflow modelling.
-        vdotmetal_out : float
-            The current outlet volume flowrate of metal from the unit, m3/s.
-        vdotslag_out : float
-            The current outlet volume flowrate of slag from the unit, m3/s.
-        """
         self.diameter = diameter
         self.depth = depth
         self.hmetal = hmetal_init
