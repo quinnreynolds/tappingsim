@@ -1,3 +1,15 @@
+"""Classes to create ladle objects.
+
+Molten products tapped from metallurgical furnaces are often stored in ladles,
+large refractory-lined containers which can then be transported on to secondary 
+processing steps or product separation. Multiple ladles may be connected in a 
+strand during tapping, to prevent spillage and to assist with separation of 
+product and waste phases.
+
+This module also includes support functions for describing phase entrainment 
+effects in the ladle outflow.
+"""
+
 import numpy
 from scipy.constants import pi
 
@@ -27,7 +39,7 @@ def overflowmodel_step(interfacedeltah, *consts):
     return 0
 
 def overflowmodel_exp(interfacedeltah, *consts):
-    """Function to calculate metal volume fraction entrained in slag outflow 
+    r"""Function to calculate metal volume fraction entrained in slag outflow 
     stream as a function of the location of the slag-metal interface.
     
     Parameters
@@ -49,6 +61,8 @@ def overflowmodel_exp(interfacedeltah, *consts):
     This model describes an exponential decay of metal entrainment as a 
     function of the position of the interface relative to the outlet. [1]_
     
+    .. math:: f=C_0 exp ( -C_1 \delta_h )
+    
     Fraction = consts[0]*exp(-consts[1]*interfacedeltah) if interfacedeltah > 0
              = consts[0]                                 if interfacedeltah < 0
     
@@ -57,8 +71,8 @@ def overflowmodel_exp(interfacedeltah, *consts):
     .. [1] Q.G. Reynolds, J.E. Olsen, J.D. Steenkamp, Variability in Ferroalloy 
        Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
        International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
-       SSRN: https://ssrn.com/abstract=3926222 or 
-       http://dx.doi.org/10.2139/ssrn.3926222.
+       SSRN: doi:10.2139/ssrn.3926222 or https://ssrn.com/abstract=3926222.
+       .
     """
     if interfacedeltah > 0:
         return consts[0]*numpy.exp(-consts[1]*interfacedeltah)
@@ -102,6 +116,7 @@ class CylindricalLadle():
     vdotslag_out : float
         The current outlet volume flowrate of slag from the unit, m3/s.
     """
+    
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
                  overflowmodel, overflowconsts):
         self.diameter = diameter

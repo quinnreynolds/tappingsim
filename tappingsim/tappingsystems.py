@@ -1,3 +1,11 @@
+"""Classes to create tapping system simulator objects.
+
+It is often of interest to consider some or all components of a furnace tapping 
+system as a single integrated simulation, in order to investigate interactions 
+between different components and the effect of over-arching control and 
+operation philosophies.
+"""
+
 import numpy
 
 
@@ -22,7 +30,8 @@ class SAF():
         A running counter of metal tapped from the furnace, in kg.
     slagmasstotaliser : float
         A running counter of slag tapped from the furnace, in kg.
-    """        
+    """
+    
     def __init__(self, furnace):
         self.furnace = furnace
         self.timetotaliser = 0
@@ -124,7 +133,8 @@ class SAFWithLadles():
         A running counter of slag tapped from the furnace, in kg.
     tapholeopen_yn : boolean
         Indicate whether furnace tap-hole is open (True) or closed (False).
-    """        
+    """
+    
     def __init__(self, furnace, launder, ladles):
         self.furnace = furnace
         self.launder = launder

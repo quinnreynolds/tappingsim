@@ -1,6 +1,13 @@
+"""Classes to create transfer launder objects. 
+
+Launders are typically open-channel gravity flow conduits which redirect the 
+flow of tapped material from the furnace into storage ladles or other 
+post-treatment units.
+"""
+
 class SimpleSisoLaunder():
     """Tapping launder class. This version is a simple single-in-single-out
-    launder channel with no hold-up or accumulation effects.
+    launder channel with no accumulation or spillage effects.
     
     Parameters
     ----------

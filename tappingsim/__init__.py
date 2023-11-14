@@ -1,4 +1,5 @@
-# Furnace tapping simulator, base module information
+"""A set of tools for simulation of metallurgical furnace tapping problems.
+"""
 
 __version__ = '0.6'
 

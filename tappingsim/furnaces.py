@@ -1,3 +1,14 @@
+"""Classes to create furnace objects.
+
+Metallurgical furnaces typically produce one or more immiscible molten phase, 
+and do so continuously provided the furnace is supplied with power and feed 
+material. The molten products are generally removed by tapping through one or 
+more tap-holes.
+
+This module also includes support functions for describing flow drag effects in 
+packed beds and tap-hole channels.
+"""
+
 import math
 from scipy.constants import g, pi
 
@@ -36,12 +47,14 @@ def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
     Notes
     -----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Kozeny-Carman 
-    equation is valid for laminar flow conditions only. [1]_ [2]_
+    correlation is valid for laminar flow conditions only. [1]_ [2]_
     
     References
     ----------
-    .. [1] J. Kozeny, Ueber kapillare Leitung des Wassers im Boden. Sitzungsber Akad. Wiss., Wien, 136(2a): 271-306, 1927.
-    .. [2] P.C. Carman, Fluid flow through granular beds. Transactions, Institution of Chemical Engineers, London, 15: 150-166, 1937.
+    .. [1] J. Kozeny, Ueber kapillare Leitung des Wassers im Boden. Sitzungsber 
+       Akad. Wiss., Wien, 136(2a): 271-306, 1927.
+    .. [2] P.C. Carman, Fluid flow through granular beds. Transactions, 
+       Institution of Chemical Engineers, London, 15: 150-166, 1937.
     """
     rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
@@ -92,13 +105,13 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
         
     Notes
     -----
-    dP = A*u^2 + B*u, where u is the fluid velocity. The Ergun equation is 
+    dP = A*u^2 + B*u, where u is the fluid velocity. The Ergun correlation is 
     valid for both laminar and turbulent flow regimes. [1]_
     
     References
     ----------
     .. [1] S. Ergun, Fluid flow through packed columns. Chem. Eng. Prog. 48: 
-    89-94, 1952.
+       89-94, 1952.
     """
     rt, rmin = 0.5*tapholediameter, 0.5*bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
@@ -148,11 +161,11 @@ def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
     References
     ----------
     .. [1] V. Bellos, I. Nalbantis, G. Tsakiris, Friction Modeling of Flood 
-    Flow Simulations. Journal of Hydraulic Engineering, 144(12): 04018073, 2018.
-    doi:10.1061/(asce)hy.1943-7900.0001540.
+       Flow Simulations. Journal of Hydraulic Engineering, 144(12): 04018073, 
+       2018. doi:10.1061/(asce)hy.1943-7900.0001540.
     .. [2] V. Bellos, I. Nalbantis, G. Tsakiris, Erratum for Friction Modeling 
-    of Flood Flow Simulations. Journal of Hydraulic Engineering, 146(10): 
-    08220005, 2020. doi:10.1061/(ASCE)HY.1943-7900.0001802.
+       of Flood Flow Simulations. Journal of Hydraulic Engineering, 146(10): 
+       08220005, 2020. doi:10.1061/(ASCE)HY.1943-7900.0001802.
     """
     d_over_e = diameter / roughness
     NRe = diameter * velocity * density / viscosity
@@ -194,7 +207,7 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
     References
     ----------
     .. [1] N.-S. Cheng, Formulas for Friction Factor in Transitional Regimes. 
-    Journal of Hydraulic Engineering. 134(9): 1357-1362, 2008.
+       Journal of Hydraulic Engineering. 134(9): 1357-1362, 2008.
     """
     d_over_e = diameter / roughness
     NRe = diameter * velocity * density / viscosity
@@ -236,7 +249,7 @@ def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
     References
     ----------
     .. [1] T.K. Serghides, Estimate friction factor accurately. Chemical 
-    Engineering Journal. 91(5): 63–64, 1984.
+       Engineering Journal. 91(5): 63-64, 1984.
     """
     if velocity < 1e-6:
         return 64
@@ -284,7 +297,7 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
     References
     ----------
     .. [1] T.K. Serghides, Estimate friction factor accurately. Chemical 
-    Engineering Journal. 91(5): 63–64, 1984.
+       Engineering Journal. 91(5): 63-64, 1984.
     """
     if velocity < 1e-6:
         return 64
@@ -446,8 +459,9 @@ class SubmergedArcFurnace():
     .. [1] J.E. Olsen, Q.G. Reynolds, Mathematical Modeling of Furnace 
         Drainage While Tapping Slag and Metal Through a Single Tap-Hole. 
         Metallurgical and Materials Transactions B 51(4): 1750-1759, 2020. 
-        https://doi.org/10.1007/s11663-020-01873-1.
+        doi:10.1007/s11663-020-01873-1.
     """
+    
     def __init__(self, powerMVA, powerfactor, metalSER, slagmetalmassratio, 
                  furnacediameter, activeareafraction, tapholediameter, 
                  tapholelength, tapholeroughness, tapholeheight, densitymetal, 
@@ -648,8 +662,8 @@ class SubmergedArcFurnace():
         """
         Integrate object state forward over a series of time steps. The 
         model parameters are assumed to remain fixed during this period. This 
-        offers higher performance than individual time step calculations, for 
-        large parameter sweeps and similar applications.
+        is more performant than individual time step calculations, for large 
+        parameter sweeps and similar applications.
 
         Parameters
         ----------
