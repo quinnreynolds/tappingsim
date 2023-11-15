@@ -4,6 +4,7 @@ It is often of interest to consider some or all components of a furnace tapping
 system as a single integrated simulation, in order to investigate interactions 
 between different components and the effect of over-arching control and 
 operation philosophies.
+
 """
 
 import numpy
@@ -30,6 +31,7 @@ class SAF():
         A running counter of metal tapped from the furnace, in kg.
     slagmasstotaliser : float
         A running counter of slag tapped from the furnace, in kg.
+        
     """
     
     def __init__(self, furnace):
@@ -42,30 +44,35 @@ class SAF():
     def open_taphole(self):
         """
         Set furnace tap-hole to open.
+        
         """
         self.furnace.tapholeopen_yn = True
         
     def close_taphole(self):
         """
         Set furnace tap-hole to closed.
+        
         """
         self.furnace.tapholeopen_yn = False
     
     def reset_time_totaliser(self):
         """
         Reset time totaliser counter to zero.
+        
         """
         self.timetotaliser = 0
         
     def reset_power_totaliser(self):
         """
         Reset power totaliser counter to zero.
+        
         """
         self.powertotaliserkWh = 0
         
     def reset_mass_totaliser(self):
         """
         Reset tap mass totaliser counters to zero.
+        
         """
         self.metalmasstotaliser = 0
         self.slagmasstotaliser = 0
@@ -73,6 +80,7 @@ class SAF():
     def reset_all_totalisers(self):
         """
         Reset all totaliser counters to zero.
+        
         """
         self.reset_time_totaliser()
         self.reset_power_totaliser()
@@ -90,6 +98,7 @@ class SAF():
         Returns
         -------
         None.
+        
         """
         self.furnace.calc_dt(dt)    
         self.timetotaliser += dt
@@ -131,8 +140,7 @@ class SAFWithLadles():
         A running counter of metal tapped from the furnace, in kg.
     slagmasstotaliser : float
         A running counter of slag tapped from the furnace, in kg.
-    tapholeopen_yn : boolean
-        Indicate whether furnace tap-hole is open (True) or closed (False).
+        
     """
     
     def __init__(self, furnace, launder, ladles):
@@ -147,18 +155,21 @@ class SAFWithLadles():
     def open_taphole(self):
         """
         Set furnace tap-hole to open.
+        
         """
         self.furnace.tapholeopen_yn = True
         
     def close_taphole(self):
         """
         Set furnace tap-hole to closed.
+        
         """
         self.furnace.tapholeopen_yn = False
 
     def empty_ladles(self):
         """
         Set slag and metal levels in all ladles to zero.
+        
         """
         for ldl in self.ladles:
             ldl.hmetal, ldl.hslag = 0, 0
@@ -166,18 +177,21 @@ class SAFWithLadles():
     def reset_time_totaliser(self):
         """
         Reset time totaliser counter to zero.
+        
         """
         self.timetotaliser = 0
         
     def reset_power_totaliser(self):
         """
         Reset power totaliser counter to zero.
+        
         """
         self.powertotaliserkWh = 0
         
     def reset_mass_totaliser(self):
         """
         Reset tap mass totaliser counters to zero.
+        
         """
         self.metalmasstotaliser = 0
         self.slagmasstotaliser = 0
@@ -185,6 +199,7 @@ class SAFWithLadles():
     def reset_all_totalisers(self):
         """
         Reset all totaliser counters to zero.
+        
         """
         self.reset_time_totaliser()
         self.reset_power_totaliser()
@@ -204,6 +219,7 @@ class SAFWithLadles():
             Mass of metal in each ladle, in kg.
         slagmasses : list of float
             Mass of slag in each ladle, in kg.
+            
         """
         metalmasses, slagmasses = [], []
         for ldl in self.ladles:
@@ -225,6 +241,7 @@ class SAFWithLadles():
         Returns
         -------
         None.
+        
         """
         self.furnace.calc_dt(dt)
         if self.furnace.tapholeopen_yn:

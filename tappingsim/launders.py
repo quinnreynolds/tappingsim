@@ -3,6 +3,7 @@
 Launders are typically open-channel gravity flow conduits which redirect the 
 flow of tapped material from the furnace into storage ladles or other 
 post-treatment units.
+
 """
 
 class SimpleSisoLaunder():
@@ -21,6 +22,7 @@ class SimpleSisoLaunder():
     vdotslag_out : float
         The output slag flowrate from the launder in the current state, 
         kg/s
+        
     """        
     def __init__(self):
         self.vdotmetal_out = 0
@@ -43,6 +45,7 @@ class SimpleSisoLaunder():
         Returns
         -------
         None.
+        
         """
         self.vdotmetal_out = vdotmetal_in
         self.vdotslag_out = vdotslag_in
