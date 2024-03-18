@@ -872,6 +872,7 @@ class DCArcFurnace():
                                      entrykls, tapholeheights, fdmodels, 
                                      tapholeroughnesses, tapholelengths, 
                                      umetals0, uslags0):
+            umetal, uslag, area_m, area_s = 0, 0, 0, 0
             if tapholeopen_yn:
                 rt = 0.5 * tapholediameter
                 a_m = 0.5 * (1 + entrykl) * densitymetal
@@ -971,10 +972,11 @@ class DCArcFurnace():
                         uslag = 0
                     if hmetal <= 0:
                         umetal = 0
-                umetals.append(umetal)
-                uslags.append(uslag)
-                vdotmetal_outs.append(area_m * umetal)
-                vdotslag_outs.append(area_s * uslag)
+
+            umetals.append(umetal)
+            uslags.append(uslag)
+            vdotmetal_outs.append(area_m * umetal)
+            vdotslag_outs.append(area_s * uslag)
             
         return umetals, uslags, vdotmetal_outs, vdotslag_outs
 
@@ -1004,7 +1006,6 @@ class DCArcFurnace():
             self.tapholeroughnesses, self.entrykls, self.densitymetal, 
             self.densityslag, self.viscositymetal, self.viscosityslag, 
             self.tapholesopen_yn, self.allownegativeheights_yn, self.fdmodels)
-        
         dhmetal = dt * areaconst * (vdotmetal_in-sum(vdotmetal_outs))
         dhslag = dt * areaconst * (vdotslag_in-sum(vdotslag_outs))
         self.hmetal += dhmetal
