@@ -859,18 +859,19 @@ class DCArcFurnace():
         self.umetals = [0 for n in range(self.ntapholes)]
         self.uslags = [0 for n in range(self.ntapholes)]
         
-    def _calc_vdot_out(self, hmetal, hslag, umetal0, uslag0, 
+    def _calc_vdot_out(self, hmetal, hslag, umetals0, uslags0, 
                        tapholediameters, tapholelengths, tapholeheights, 
                        tapholeroughnesses, entrykls, densitymetal, densityslag, 
                        viscositymetal, viscosityslag, tapholesopen_yn, 
                        allownegativeheights_yn, fdmodels):
         umetals, uslags, vdotmetal_outs, vdotslag_outs = [], [], [], []
-        for (tapholeopen_yn, tapholediameter, entrykl, tapholeheight, fdmodel, 
-             tapholeroughness, tapholelength) in zip(tapholesopen_yn, 
-                                                     tapholediameters, entrykls,
-                                                     tapholeheights, fdmodels, 
-                                                     tapholeroughnesses, 
-                                                     tapholelengths):
+        for (tapholeopen_yn, tapholediameter, 
+             entrykl, tapholeheight, fdmodel, 
+             tapholeroughness, tapholelength, 
+             umetal0, uslag0) in zip(tapholesopen_yn, tapholediameters, 
+                                     entrykls, tapholeheights, fdmodels, 
+                                     tapholeroughnesses, tapholelengths, 
+                                     umetals0, uslags0):
             if tapholeopen_yn:
                 rt = 0.5 * tapholediameter
                 a_m = 0.5 * (1 + entrykl) * densitymetal
