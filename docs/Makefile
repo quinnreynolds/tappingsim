@@ -7,11 +7,8 @@ help:
 
 .PHONY: help Makefile html clean
 
-html: notebooks
+html:
 	@$(SPHINXBUILD) -M html $(SOURCEDIR) $(BUILDDIR) $(SPHINXOPTS) $(O)
 
-notebooks:
-	@cp -r ../notebooks ./notebooks
-
 clean:
-	@rm -rf $(BUILDDIR) notebooks
+	@rm -rf $(BUILDDIR)

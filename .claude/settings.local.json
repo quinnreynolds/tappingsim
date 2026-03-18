@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git clone:*)",
+      "Bash(git checkout:*)",
+      "Bash(pip install:*)",
+      "Bash(pycodestyle tappingsim/)",
+      "Bash(python3 -m pip install pycodestyle -q)",
+      "Bash(python3 -m pycodestyle tappingsim/)",
+      "Bash(python3 -m pip install autopep8 -q)",
+      "Bash(python3 -m autopep8 --in-place --aggressive tappingsim/furnaces.py tappingsim/launders.py tappingsim/ladles.py tappingsim/tappingsystems.py)",
+      "Bash(python3 -m pycodestyle --max-line-length=99 tappingsim/)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python3 -m pip install -e . -q)",
+      "Bash(python3 -m pip install pytest -q)",
+      "Bash(python3 -m pip install -e .)",
+      "Bash(python3 -m pytest tests/ -v)",
+      "Bash(/Volumes/Software/ClaudeCode/tappingsim/.gitignore:*)",
+      "Bash(git rm:*)",
+      "Bash(python3 -m sphinx --version)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -m sphinx docs/ docs/_build/html -b html)",
+      "Bash(ln -s ../notebooks /Volumes/Software/ClaudeCode/tappingsim/docs/notebooks)",
+      "Bash(brew install:*)",
+      "Bash(python3 -c \"import json; nb=json.load\\(open\\(''/Volumes/Software/ClaudeCode/tappingsim/notebooks/examples_tappingsystems.ipynb''\\)\\); cells=[c for c in nb[''cells''] if c.get\\(''outputs''\\)]; print\\(len\\(cells\\), ''cells with output''\\); [print\\(''cell'',i,''outputs:'',len\\(c[''outputs'']\\),[o.get\\(''output_type''\\) for o in c[''outputs'']]\\) for i,c in enumerate\\(cells\\)]\")",
+      "Bash(python3 -c \":*)",
+      "Bash(python3 -m pytest /Volumes/Software/ClaudeCode/tappingsim/tests/ -q)"
+    ]
+  }
+}
