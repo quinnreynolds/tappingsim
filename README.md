@@ -8,3 +8,6 @@ A set of Python tools for performing simulations of metallurgical furnace tappin
 * Dependencies: You will need an implementation of Python > 3.6, and relatively recent versions of numpy and scipy. 
 * Installation: Clone the repository, change into the `tappingsim` directory, and then: `pip install -U .`
 * Usage: See examples in `docs/notebooks` directory.
+
+## Acknowledgements
+Code modernisation (packaging, tests, documentation) assisted by [Claude](https://claude.ai) (Anthropic).
