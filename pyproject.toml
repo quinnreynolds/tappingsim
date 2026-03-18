@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tappingsim"
-version = "1.0.0"
+version = "2.0.0"
 description = "Reduced-order modelling of furnace tapping systems"
 license = "MIT"
 authors = [{ name = "Quinn Reynolds", email = "quinnr@mintek.co.za" }]

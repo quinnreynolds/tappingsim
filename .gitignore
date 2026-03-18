@@ -18,6 +18,7 @@ env/
 # Tools
 .pytest_cache/
 .ruff_cache/
+.claude/
 
 # Documentation build output
 docs/_build/
