@@ -7,7 +7,7 @@ operation philosophies.
 
 """
 
-import numpy
+import math
 
 
 class SAF():
@@ -223,7 +223,7 @@ class SAFWithLadles():
         """
         metalmasses, slagmasses = [], []
         for ldl in self.ladles:
-            area = numpy.pi * 0.25 * ldl.diameter**2
+            area = math.pi * 0.25 * ldl.diameter**2
             metalmasses.append(area * ldl.hmetal * self.furnace.densitymetal)
             slagmasses.append(area * (ldl.hslag - ldl.hmetal)
                               * self.furnace.densityslag)

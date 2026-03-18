@@ -11,7 +11,7 @@ effects in the ladle outflow.
 
 """
 
-import numpy
+import math
 from scipy.constants import pi
 
 
@@ -77,7 +77,7 @@ def overflowmodel_exp(interfacedeltah, *consts):
 
     """
     if interfacedeltah > 0:
-        return consts[0] * numpy.exp(-consts[1] * interfacedeltah)
+        return consts[0] * math.exp(-consts[1] * interfacedeltah)
     else:
         return consts[0]
 
@@ -127,7 +127,6 @@ class CylindricalLadle():
         self.hmetal = hmetal_init
         self.hslag = hslag_init
         self.overflowmodel = lambda dh: overflowmodel(dh, *overflowconsts)
-        self.diameter = self.diameter
 
     def _calc_vdot_out(self, dt):
         """Calculate volumetric outflow rates of metal and slag from the ladle

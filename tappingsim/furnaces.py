@@ -634,7 +634,7 @@ class SubmergedArcFurnace():
                     pa = g * (densityslag * (hs - hm) + densitymetal * hm)
 
             # calculate phase velocities
-            converged, umetal, uslag = 1, umetal0, uslag0
+            converged, umetal, uslag = math.inf, umetal0, uslag0
             while converged > 1e-6:
                 fdm = fdmodel(umetal, densitymetal, viscositymetal,
                               tapholediameter, tapholeroughness)
@@ -650,7 +650,7 @@ class SubmergedArcFurnace():
                 umetal, uslag = nvm, nvs
 
             # interface deformations
-            pcorr = self.bedporosity ** 2
+            pcorr = bedporosity ** 2
             h0_l = (-rt - densityslag * uslag * uslag
                     / (8 * g * pcorr * (densitymetal - densityslag)))
             h0_h = (rt + densitymetal * umetal * umetal
@@ -773,6 +773,8 @@ class SubmergedArcFurnace():
         vdotmetal_in = mdotmetal_in / self.densitymetal
         vdotslag_in = mdotmetal_in * self.slagmetalmassratio / self.densityslag
 
+        densitymetal = self.densitymetal
+        densityslag = self.densityslag
         metalmassout, slagmassout = 0, 0
         hmetal, hslag, umetal, uslag = self.hmetal, self.hslag, 1, 1
         for dt in dts:
@@ -782,8 +784,8 @@ class SubmergedArcFurnace():
             dhslag = dt * areaconst * (vdotslag_in - vdotslag_out)
             hmetal += dhmetal
             hslag += dhmetal + dhslag
-            metalmassout += dt * (vdotmetal_out * params[10])
-            slagmassout += dt * (vdotslag_out * params[11])
+            metalmassout += dt * vdotmetal_out * densitymetal
+            slagmassout += dt * vdotslag_out * densityslag
 
         self.hmetal, self.hslag = hmetal, hslag
         self.umetal, self.uslag = umetal, uslag
