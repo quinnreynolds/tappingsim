@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "tappingsim"
+version = "1.0.0"
+description = "Reduced-order modelling of furnace tapping systems"
+license = { text = "MIT" }
+authors = [{ name = "Quinn Reynolds", email = "quinnr@mintek.co.za" }]
+requires-python = ">=3.8"
+dependencies = ["numpy", "scipy"]
+
+[project.urls]
+Homepage = "https://github.com/quinnreynolds/tappingsim"
+
+[tool.pycodestyle]
+max-line-length = 99
+
+[tool.ruff]
+line-length = 99
