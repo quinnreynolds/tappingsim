@@ -48,13 +48,14 @@ def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
     Note
     ----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Kozeny-Carman
-    correlation is valid for laminar flow conditions only. [1]_ [2]_
+    correlation is valid for laminar flow conditions only. [Kozeny1927]_
+    [Carman1937]_
 
     References
     ----------
-    .. [1] J. Kozeny. Ueber kapillare Leitung des Wassers im Boden. Sitzungsber
-       Akad. Wiss., Wien, 136(2a): 271-306, 1927.
-    .. [2] P.C. Carman. Fluid flow through granular beds. Transactions,
+    .. [Kozeny1927] J. Kozeny. Ueber kapillare Leitung des Wassers im Boden.
+       Sitzungsber Akad. Wiss., Wien, 136(2a): 271-306, 1927.
+    .. [Carman1937] P.C. Carman. Fluid flow through granular beds. Transactions,
        Institution of Chemical Engineers, London, 15: 150-166, 1937.
 
     """
@@ -109,12 +110,12 @@ def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
     Note
     ----
     dP = A*u^2 + B*u, where u is the fluid velocity. The Ergun correlation is
-    valid for both laminar and turbulent flow regimes. [1]_
+    valid for both laminar and turbulent flow regimes. [Ergun1952]_
 
     References
     ----------
-    .. [1] S. Ergun. Fluid flow through packed columns. Chem. Eng. Prog. 48:
-       89-94, 1952.
+    .. [Ergun1952] S. Ergun. Fluid flow through packed columns. Chem. Eng.
+       Prog. 48: 89-94, 1952.
     """
     rt, rmin = 0.5 * tapholediameter, 0.5 * bedmindiameter
     eff_d = bedparticlediameter * bedparticlesphericity
@@ -160,17 +161,17 @@ def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
     Note
     ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Bellos et al
-    correlation is valid in all flow regimes including transitional flow. [1]_
-    [2]_
+    correlation is valid in all flow regimes including transitional flow.
+    [Bellos2018]_ [Bellos2020]_
 
     References
     ----------
-    .. [1] V. Bellos, I. Nalbantis, G. Tsakiris. Friction Modeling of Flood
-       Flow Simulations. Journal of Hydraulic Engineering, 144(12): 04018073,
-       2018. doi:10.1061/(asce)hy.1943-7900.0001540.
-    .. [2] V. Bellos, I. Nalbantis, G. Tsakiris. Erratum for Friction Modeling
-       of Flood Flow Simulations. Journal of Hydraulic Engineering, 146(10):
-       08220005, 2020. doi:10.1061/(ASCE)HY.1943-7900.0001802.
+    .. [Bellos2018] V. Bellos, I. Nalbantis, G. Tsakiris. Friction Modeling of
+       Flood Flow Simulations. Journal of Hydraulic Engineering, 144(12):
+       04018073, 2018. doi:10.1061/(asce)hy.1943-7900.0001540.
+    .. [Bellos2020] V. Bellos, I. Nalbantis, G. Tsakiris. Erratum for Friction
+       Modeling of Flood Flow Simulations. Journal of Hydraulic Engineering,
+       146(10): 08220005, 2020. doi:10.1061/(ASCE)HY.1943-7900.0001802.
     """
     d_over_e = diameter / roughness
     NRe = diameter * velocity * density / viscosity
@@ -208,12 +209,13 @@ def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
     Note
     ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Cheng
-    correlation is valid in all flow regimes including transitional flow. [1]_
+    correlation is valid in all flow regimes including transitional flow.
+    [Cheng2008]_
 
     References
     ----------
-    .. [1] N.-S. Cheng. Formulas for Friction Factor in Transitional Regimes.
-       Journal of Hydraulic Engineering. 134(9): 1357-1362, 2008.
+    .. [Cheng2008] N.-S. Cheng. Formulas for Friction Factor in Transitional
+       Regimes. Journal of Hydraulic Engineering. 134(9): 1357-1362, 2008.
     """
     d_over_e = diameter / roughness
     NRe = diameter * velocity * density / viscosity
@@ -251,12 +253,12 @@ def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
     Note
     ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides
-    correlation is valid for laminar and turbulent flow regimes. [1]_
+    correlation is valid for laminar and turbulent flow regimes. [Serghides1984]_
 
     References
     ----------
-    .. [1] T.K. Serghides. Estimate friction factor accurately. Chemical
-       Engineering Journal. 91(5): 63-64, 1984.
+    .. [Serghides1984] T.K. Serghides. Estimate friction factor accurately.
+       Chemical Engineering Journal. 91(5): 63-64, 1984.
     """
     if velocity < 1e-6:
         return 64
@@ -301,12 +303,12 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
     Note
     ----
     dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides
-    correlation is valid laminar and turbulent flow regimes. [1]_
+    correlation is valid laminar and turbulent flow regimes. [Serghides1984b]_
 
     References
     ----------
-    .. [1] T.K. Serghides. Estimate friction factor accurately. Chemical
-       Engineering Journal. 91(5): 63-64, 1984.
+    .. [Serghides1984b] T.K. Serghides. Estimate friction factor accurately.
+       Chemical Engineering Journal. 91(5): 63-64, 1984.
     """
     if velocity < 1e-6:
         return 64
@@ -462,11 +464,11 @@ class SubmergedArcFurnace():
 
     Note
     ----
-    This model is based on the formulation by Olsen & Reynolds. [1]_
+    This model is based on the formulation by Olsen & Reynolds. [Olsen2020]_
 
     References
     ----------
-    .. [1] J.E. Olsen, Q.G. Reynolds. Mathematical Modeling of Furnace
+    .. [Olsen2020] J.E. Olsen, Q.G. Reynolds. Mathematical Modeling of Furnace
         Drainage While Tapping Slag and Metal Through a Single Tap-Hole.
         Metallurgical and Materials Transactions B 51(4): 1750-1759, 2020.
         doi:10.1007/s11663-020-01873-1.
