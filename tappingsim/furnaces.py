@@ -508,6 +508,8 @@ class SubmergedArcFurnace():
         self.tapholeopen_yn = False
         self.umetal = 0
         self.uslag = 0
+        self.vdotmetal_out = 0
+        self.vdotslag_out = 0
 
     def _calc_vdot_out(self, hmetal, hslag, umetal0, uslag0,
                        tapholediameter, tapholelength, tapholeheight,

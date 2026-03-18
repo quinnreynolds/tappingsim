@@ -1,15 +1,21 @@
 [build-system]
 requires = ["setuptools>=64"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "tappingsim"
 version = "1.0.0"
 description = "Reduced-order modelling of furnace tapping systems"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Quinn Reynolds", email = "quinnr@mintek.co.za" }]
 requires-python = ">=3.8"
 dependencies = ["numpy", "scipy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["tappingsim*"]
 
 [project.urls]
 Homepage = "https://github.com/quinnreynolds/tappingsim"
