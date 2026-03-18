@@ -11,18 +11,14 @@ class SimpleSisoLaunder():
     """Tapping launder class. This version is a simple single-in-single-out
     launder channel with no accumulation or spillage effects.
 
-    Parameters
-    ----------
-    None.
-
     Attributes
     ----------
     vdotmetal_out : float
         The output metal flowrate from the launder in the current state,
-        kg/s
+        m3/s.
     vdotslag_out : float
         The output slag flowrate from the launder in the current state,
-        kg/s
+        m3/s.
 
     """
 
@@ -40,9 +36,9 @@ class SimpleSisoLaunder():
         dt : float
             Length of time step, in s.
         vdotmetal_in : float
-            Flowrate of metal into the launder, kg/s.
+            Flowrate of metal into the launder, m3/s.
         vdotslag_in : float
-            Flowrate of slag into the launder, kg/s.
+            Flowrate of slag into the launder, m3/s.
 
         Returns
         -------

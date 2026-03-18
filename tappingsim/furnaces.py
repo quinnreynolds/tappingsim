@@ -375,12 +375,12 @@ class SubmergedArcFurnace():
     bedmaxdiameter : float
         Extent of burden from tap-hole, m (set to a high value for entire
         furnace).
-    bedmodel : float
+    bedmodel : callable
         Function to be used to model the pressure drop through the burden
         section.
     entrykl : float
         Pressure loss coefficient to account for tap-hole entrance effects.
-    fdmodel : float
+    fdmodel : callable
         Function to be used to model the pressure drop through the tap-hole
         channel.
     hmetal_init : float
@@ -433,12 +433,12 @@ class SubmergedArcFurnace():
     bedmaxdiameter : float
         Extent of burden from tap-hole, m (set to a high value for entire
         furnace).
-    bedmodel : float
+    bedmodel : callable
         Function to be used to model the pressure drop through the burden
         section.
     entrykl : float
         Pressure loss coefficient to account for tap-hole entrance effects.
-    fdmodel : float
+    fdmodel : callable
         Function to be used to model the pressure drop through the tap-hole
         channel.
     hmetal : float
@@ -516,6 +516,72 @@ class SubmergedArcFurnace():
                        particlesphericity, densitymetal, densityslag,
                        viscositymetal, viscosityslag, tapholeopen_yn,
                        allownegativeheights_yn, bedmodel, fdmodel):
+        """Calculate volumetric outflow rates of metal and slag through the
+        tap-hole for the current furnace state.
+
+        Iteratively solves for phase velocities accounting for burden pressure
+        drop, tap-hole friction, and interface deformation effects. Returns
+        zero flow when the tap-hole is closed.
+
+        Parameters
+        ----------
+        hmetal : float
+            Current metal bath level above hearth, m.
+        hslag : float
+            Current slag bath level above hearth, m.
+        umetal0 : float
+            Initial guess for metal velocity in tap-hole, m/s.
+        uslag0 : float
+            Initial guess for slag velocity in tap-hole, m/s.
+        tapholediameter : float
+            Diameter of tap-hole channel, m.
+        tapholelength : float
+            Length of tap-hole channel, m.
+        tapholeheight : float
+            Position of tap-hole centreline relative to hearth level, m.
+        tapholeroughness : float
+            Roughness of the tap-hole channel surface.
+        entrykl : float
+            Pressure loss coefficient for tap-hole entrance effects.
+        bedmindiameter : float
+            Diameter of cavity in burden in front of tap-hole, m.
+        bedmaxdiameter : float
+            Extent of burden from tap-hole, m.
+        bedporosity : float
+            Porosity of the burden layer.
+        particlediameter : float
+            Diameter of burden particles, m.
+        particlesphericity : float
+            Sphericity of burden particles.
+        densitymetal : float
+            Density of the molten metal phase, kg/m3.
+        densityslag : float
+            Density of the molten slag phase, kg/m3.
+        viscositymetal : float
+            Viscosity of the molten metal phase, Pa.s.
+        viscosityslag : float
+            Viscosity of the molten slag phase, Pa.s.
+        tapholeopen_yn : bool
+            True if the tap-hole is open, False if closed.
+        allownegativeheights_yn : bool
+            Whether to allow phase heights to go below hearth level.
+        bedmodel : callable
+            Function to model pressure drop through the burden.
+        fdmodel : callable
+            Function to model friction factor in the tap-hole channel.
+
+        Returns
+        -------
+        umetal : float
+            Velocity of metal through the tap-hole, m/s.
+        uslag : float
+            Velocity of slag through the tap-hole, m/s.
+        vdotmetal_out : float
+            Volumetric outflow rate of metal, m3/s.
+        vdotslag_out : float
+            Volumetric outflow rate of slag, m3/s.
+
+        """
         umetal, uslag, vdotmetal_out, vdotslag_out = 0, 0, 0, 0
         if tapholeopen_yn:
             rt = 0.5 * tapholediameter

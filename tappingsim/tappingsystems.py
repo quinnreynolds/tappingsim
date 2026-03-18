@@ -25,7 +25,7 @@ class SAF():
         A reference to the provided furnace object.
     timetotaliser : float
         A running counter for time, in s.
-    powertotaliserkwh : float
+    powertotaliserkWh : float
         A running counter for energy input to the furnace, in kWh.
     metalmasstotaliser : float
         A running counter of metal tapped from the furnace, in kg.
@@ -134,7 +134,7 @@ class SAFWithLadles():
         A reference to the provided list of ladle objects.
     timetotaliser : float
         A running counter for time, in s.
-    powertotaliserkwh : float
+    powertotaliserkWh : float
         A running counter for energy input to the furnace, in kWh.
     metalmasstotaliser : float
         A running counter of metal tapped from the furnace, in kg.

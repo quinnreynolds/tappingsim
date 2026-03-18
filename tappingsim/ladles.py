@@ -130,6 +130,24 @@ class CylindricalLadle():
         self.diameter = self.diameter
 
     def _calc_vdot_out(self, dt):
+        """Calculate volumetric outflow rates of metal and slag from the ladle
+        for the current state, and update the vdotmetal_out and vdotslag_out
+        attributes.
+
+        Overflow occurs when the total bath level exceeds the ladle depth.
+        Metal entrainment in the slag outflow is calculated using the
+        configured overflow model.
+
+        Parameters
+        ----------
+        dt : float
+            Length of time step, in s.
+
+        Returns
+        -------
+        None.
+
+        """
         xarea = 0.25 * pi * self.diameter**2
         if self.hslag < self.depth:
             self.vdotmetal_out = 0
@@ -156,9 +174,9 @@ class CylindricalLadle():
         dt : float
             Length of time step, in s.
         vdotmetal_in : float
-            Flowrate of metal into the ladle, kg/s.
+            Flowrate of metal into the ladle, m3/s.
         vdotslag_in : float
-            Flowrate of slag into the ladle, kg/s.
+            Flowrate of slag into the ladle, m3/s.
 
         Returns
         -------
