@@ -53,49 +53,57 @@ class SimpleSisoLaunder:
 
 
 class SkimmerLaunder:
-    """Tapping launder class. This version is a two-tank model of a launder feeding an
-    underflow weir to separate slag and metal.
+    """Tapping launder class. This version is a two-tank model of a launder feeding a pre-weir pool
+    into an underflow weir and post-weir section to separate slag and metal.
 
     Attributes
     ----------
-    vdotmetal_out : float
-        The output metal flowrate from the launder in the current state,
-        m3/s.
-    vdotslag_out : float
-        The output slag flowrate from the launder in the current state,
-        m3/s.
+    TODO
 
     """
 
     def __init__(
         self,
-        # post-weir
-        metal_section_length,
-        metal_section_width,
-        metal_section_shape,
-        metal_outlet_height,
         # pre-weir
         slag_section_length,
         slag_section_width,
         slag_section_shape,
         slag_outlet_height,
+        slag_outlet_width,
         # weir
         weir_underflow_height,
         weir_underflow_width,
+        # post-weir
+        metal_section_length,
+        metal_section_width,
+        metal_section_shape,
+        metal_outlet_height,
+        metal_outlet_width,
+        # overflows
+        slag_outlet_slag_Cd,
+        slag_outlet_metal_Cd,
+        metal_outlet_slag_Cd,
+        metal_outlet_metal_Cd,
         # properties
         density_metal,
         density_slag,
     ):
-        self.metal_section_length = metal_section_length
-        self.metal_section_width = metal_section_width
-        self.metal_section_shape = metal_section_shape  # 'box' or 'v'
-        self.metal_outlet_height = metal_outlet_height
         self.slag_section_length = slag_section_length
         self.slag_section_width = slag_section_width
         self.slag_section_shape = slag_section_shape  # 'box' or 'v'
         self.slag_outlet_height = slag_outlet_height
+        self.slag_outlet_width = slag_outlet_width
         self.weir_underflow_height = weir_underflow_height
         self.weir_underflow_width = weir_underflow_width
+        self.metal_section_length = metal_section_length
+        self.metal_section_width = metal_section_width
+        self.metal_section_shape = metal_section_shape  # 'box' or 'v'
+        self.metal_outlet_height = metal_outlet_height
+        self.metal_outlet_width = metal_outlet_width
+        self.slag_outlet_slag_Cd = slag_outlet_slag_Cd
+        self.slag_outlet_metal_Cd = slag_outlet_metal_Cd
+        self.metal_outlet_slag_Cd = metal_outlet_slag_Cd
+        self.metal_outlet_metal_Cd = metal_outlet_metal_Cd
         self.density_metal = density_metal
         self.density_slag = density_slag
         self.metal_section_vdotmetal_out = 0
@@ -106,6 +114,7 @@ class SkimmerLaunder:
         self.metal_section_hslag = 0
         self.slag_section_hmetal = 0
         self.slag_section_hslag = 0
+        self.outlet_premult = 2 / 3 * numpy.sqrt(g)
 
     def _levels_to_volumes(self, hm_ss, hs_ss, hm_ms, hs_ms):
         if self.slag_section_shape == "box":
@@ -177,45 +186,89 @@ class SkimmerLaunder:
 
         # slag section
         if self.slag_section_hslag < self.slag_outlet_height:
+            # slag and metal are both below outlet
             self.slag_section_vdotmetal_out = 0
             self.slag_section_vdotslag_out = 0
         else:
-            # TODO: implement overflow entrainment models similar to ladle models -
-            #       vfrac = 0 is a simple no-entrainment model
-            # vfrac = self.overflowmodel(self.depth - self.hmetal)
+            # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
+            #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
+            #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
             vfrac = 0
             if self.slag_section_hmetal < self.slag_outlet_height:
-                vslagout = (self.slag_section_hslag - self.slag_outlet_height) * xarea_ss
-                self.slag_section_vdotmetal_out = vslagout * vfrac / dt
-                self.slag_section_vdotslag_out = vslagout * (1 - vfrac) / dt
+                # slag is above outlet, metal is below outlet
+                # TODO need to correct slag phase density for entrained metal?
+                h1 = self.slag_section_hslag - self.slag_outlet_height
+                qslag = (
+                    self.outlet_premult
+                    * self.slag_outlet_slag_Cd
+                    * self.slag_outlet_width
+                    * h1**1.5
+                )
+                self.slag_section_vdotmetal_out = vfrac * qslag
+                self.slag_section_vdotslag_out = (1 - vfrac) * qslag
             else:
-                vslagout = (self.slag_section_hslag - self.slag_section_hmetal) * xarea_ss
-                self.slag_section_vdotmetal_out = (
-                    (self.slag_section_hmetal - self.slag_outlet_height) * xarea_ss
-                    + vslagout * vfrac
-                ) / dt
-                self.slag_section_vdotslag_out = vslagout * (1 - vfrac) / dt
+                # slag and metal are both above outlet
+                # TODO need to correct slag phase density for entrained metal?
+                h1 = self.slag_section_hslag - self.slag_section_hmetal
+                h2 = self.slag_section_hmetal - self.slag_outlet_height
+                rho_ratio = self.density_slag / self.density_metal
+                qslag = (
+                    self.outlet_premult
+                    * self.slag_outlet_slag_Cd
+                    * self.slag_outlet_width
+                    * h1**1.5
+                )
+                qmetal = (
+                    self.outlet_premult
+                    * self.slag_outlet_metal_Cd
+                    * self.slag_outlet_width
+                    * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
+                )
+                self.slag_section_vdotmetal_out = qmetal + vfrac * qslag
+                self.slag_section_vdotslag_out = (1 - vfrac) * qslag
 
         # metal section
         if self.metal_section_hslag < self.metal_outlet_height:
+            # slag and metal are both below outlet
             self.metal_section_vdotmetal_out = 0
             self.metal_section_vdotslag_out = 0
         else:
-            # TODO: implement overflow entrainment models similar to ladle models -
-            #       vfrac = 0 is a simple no-entrainment model
-            # vfrac = self.overflowmodel(self.depth - self.hmetal)
+            # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
+            #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
+            #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
             vfrac = 0
             if self.metal_section_hmetal < self.metal_outlet_height:
-                vslagout = (self.metal_section_hslag - self.metal_outlet_height) * xarea_ms
-                self.metal_section_vdotmetal_out = vslagout * vfrac / dt
-                self.metal_section_vdotslag_out = vslagout * (1 - vfrac) / dt
+                # slag is above outlet, metal is below outlet
+                # TODO need to correct slag phase density for entrained metal?
+                h1 = self.metal_section_hslag - self.metal_outlet_height
+                qslag = (
+                    self.outlet_premult
+                    * self.metal_outlet_slag_Cd
+                    * self.metal_outlet_width
+                    * h1**1.5
+                )
+                self.metal_section_vdotmetal_out = vfrac * qslag
+                self.metal_section_vdotslag_out = (1 - vfrac) * qslag
             else:
-                vslagout = (self.metal_section_hslag - self.metal_section_hmetal) * xarea_ms
-                self.metal_section_vdotmetal_out = (
-                    (self.metal_section_hmetal - self.metal_outlet_height) * xarea_ms
-                    + vslagout * vfrac
-                ) / dt
-                self.metal_section_vdotslag_out = vslagout * (1 - vfrac) / dt
+                # slag and metal are both above outlet
+                # TODO need to correct slag phase density for entrained metal?
+                h1 = self.metal_section_hslag - self.metal_section_hmetal
+                h2 = self.metal_section_hmetal - self.metal_outlet_height
+                rho_ratio = self.density_slag / self.density_metal
+                qslag = (
+                    self.outlet_premult
+                    * self.metal_outlet_slag_Cd
+                    * self.metal_outlet_width
+                    * h1**1.5
+                )
+                qmetal = (
+                    self.outlet_premult
+                    * self.metal_outlet_metal_Cd
+                    * self.metal_outlet_width
+                    * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
+                )
+                self.metal_section_vdotmetal_out = qmetal + vfrac * qslag
+                self.metal_section_vdotslag_out = (1 - vfrac) * qslag
 
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
@@ -327,5 +380,3 @@ class SkimmerLaunder:
             self.metal_section_hmetal,
             self.metal_section_hslag,
         ) = self._volumes_to_levels(*V_new)
-        
-        
