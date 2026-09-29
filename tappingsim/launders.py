@@ -304,10 +304,10 @@ class SkimmerLaunder:
         V_deltas = (
             numpy.array(
                 [
-                    self.slag_section_vdotmetal_out,
-                    self.slag_section_vdotslag_out,
-                    self.metal_section_vdotmetal_out,
-                    self.metal_section_vdotslag_out,
+                    -self.slag_section_vdotmetal_out,
+                    -self.slag_section_vdotslag_out,
+                    -self.metal_section_vdotmetal_out,
+                    -self.metal_section_vdotslag_out,
                 ]
             )
             * dt
