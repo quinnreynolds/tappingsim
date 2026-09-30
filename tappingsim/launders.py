@@ -290,12 +290,10 @@ class SkimmerLaunder:
         None.
 
         """
-        # FRACTIONAL TIME STEP - FILLING
-
         # Assumptions and conventions:
+        #  - Time step dt is "small", explicit forward integration is acceptable
         #  - Positive flow direction is from slag section to metal section
         #  - No deformation of slag-metal interface at weir inflow
-
         A_w = self.weir_underflow_height * self.weir_underflow_width
         P_ss = (
             self.slag_trough_hmetal * self.density_metal * g
@@ -308,16 +306,15 @@ class SkimmerLaunder:
         deltaP = P_ss - P_ms
         u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
         u_sw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_slag)
-
-        # slag-metal interface in slag section is above weir underflow channel
+        # slag-metal interface in slag trough is above weir underflow channel
         if self.slag_trough_hmetal > self.weir_underflow_height:
             vdot_metal_12 = A_w * u_mw
             vdot_slag_12 = 0
-        # slag-metal interface in slag section is below weir underflow channel
+        # slag-metal interface in slag trough is below weir underflow channel
         elif self.slag_trough_hslag > self.weir_underflow_height:
             vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
             vdot_slag_12 = (1 - self.slag_trough_hmetal / self.weir_underflow_height) * A_w * u_sw
-        # free surface in slag section is below weir underflow channel
+        # free surface in slag trough is below weir underflow channel
         else:
             vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
             vdot_slag_12 = (
@@ -325,43 +322,16 @@ class SkimmerLaunder:
                 * A_w
                 * u_sw
             )
-
-        V_deltas = (
-            numpy.array(
-                [
-                    vdotmetal_in - vdot_metal_12,
-                    vdotslag_in - vdot_slag_12,
-                    vdot_metal_12,
-                    vdot_slag_12,
-                ]
-            )
-            * dt
-        )
-        V_0 = numpy.array(
-            self._levels_to_volumes(
-                self.slag_trough_hmetal,
-                self.slag_trough_hslag,
-                self.metal_trough_hmetal,
-                self.metal_trough_hslag,
-            )
-        )
-        V_new = V_0 + V_deltas
-        (
-            self.slag_trough_hmetal,
-            self.slag_trough_hslag,
-            self.metal_trough_hmetal,
-            self.metal_trough_hslag,
-        ) = self._volumes_to_levels(*V_new)
-
-        # FRACTIONAL TIME STEP - EMPTYING
+        # update trough outlet flowrates
         self._calc_vdot_out(dt)
+        # calculate mass balance and new levels
         V_deltas = (
             numpy.array(
                 [
-                    -self.slag_trough_vdotmetal_out,
-                    -self.slag_trough_vdotslag_out,
-                    -self.metal_trough_vdotmetal_out,
-                    -self.metal_trough_vdotslag_out,
+                    vdotmetal_in - vdot_metal_12 - self.slag_trough_vdotmetal_out,
+                    vdotslag_in - vdot_slag_12 - self.slag_trough_vdotslag_out,
+                    vdot_metal_12 - self.metal_trough_vdotmetal_out,
+                    vdot_slag_12 - self.metal_trough_vdotslag_out,
                 ]
             )
             * dt
