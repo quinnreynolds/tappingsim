@@ -53,8 +53,12 @@ class SimpleSisoLaunder:
 
 
 class SkimmerLaunder:
-    """Tapping launder class. This version is a two-tank model of a launder feeding a pre-weir pool
-    into an underflow weir and post-weir section to separate slag and metal.
+    """Tapping launder class. This version is a two-tank model of a launder feeding into a
+    pre-weir slag trough, through an underflow weir, and then into a post-weir metal trough.
+    Open-channel gravity overflow outlets exit from the top of each trough section.
+
+    The trough sections are assumed to have a trapezoidal cross section, and are defined by
+    length, height, and lower and upper trough widths.
 
     Attributes
     ----------
@@ -65,101 +69,101 @@ class SkimmerLaunder:
     def __init__(
         self,
         # pre-weir
-        slag_section_length,
-        slag_section_width,
-        slag_section_shape,
-        slag_outlet_height,
-        slag_outlet_width,
+        slag_trough_length,
+        slag_trough_upper_width,
+        slag_trough_lower_width,
+        slag_trough_height,
+        slag_trough_outlet_height,
+        slag_trough_outlet_width,
         # weir
         weir_underflow_height,
         weir_underflow_width,
         # post-weir
-        metal_section_length,
-        metal_section_width,
-        metal_section_shape,
-        metal_outlet_height,
-        metal_outlet_width,
+        metal_trough_length,
+        metal_trough_upper_width,
+        metal_trough_lower_width,
+        metal_trough_height,
+        metal_trough_outlet_height,
+        metal_trough_outlet_width,
         # overflows
-        slag_outlet_slag_Cd,
-        slag_outlet_metal_Cd,
-        metal_outlet_slag_Cd,
-        metal_outlet_metal_Cd,
+        slag_trough_outlet_slag_Cd,
+        slag_trough_outlet_metal_Cd,
+        metal_trough_outlet_slag_Cd,
+        metal_trough_outlet_metal_Cd,
         # properties
         density_metal,
         density_slag,
     ):
-        self.slag_section_length = slag_section_length
-        self.slag_section_width = slag_section_width
-        self.slag_section_shape = slag_section_shape  # 'box' or 'v'
-        self.slag_outlet_height = slag_outlet_height
-        self.slag_outlet_width = slag_outlet_width
+        self.slag_trough_length = slag_trough_length
+        self.slag_trough_upper_width = slag_trough_upper_width
+        self.slag_trough_lower_width = slag_trough_lower_width
+        self.slag_trough_height = slag_trough_height
+        self.slag_trough_outlet_height = slag_trough_outlet_height
+        self.slag_trough_outlet_width = slag_trough_outlet_width
         self.weir_underflow_height = weir_underflow_height
         self.weir_underflow_width = weir_underflow_width
-        self.metal_section_length = metal_section_length
-        self.metal_section_width = metal_section_width
-        self.metal_section_shape = metal_section_shape  # 'box' or 'v'
-        self.metal_outlet_height = metal_outlet_height
-        self.metal_outlet_width = metal_outlet_width
-        self.slag_outlet_slag_Cd = slag_outlet_slag_Cd
-        self.slag_outlet_metal_Cd = slag_outlet_metal_Cd
-        self.metal_outlet_slag_Cd = metal_outlet_slag_Cd
-        self.metal_outlet_metal_Cd = metal_outlet_metal_Cd
+        self.metal_trough_length = metal_trough_length
+        self.metal_trough_upper_width = metal_trough_upper_width
+        self.metal_trough_lower_width = metal_trough_lower_width
+        self.metal_trough_height = metal_trough_height
+        self.metal_trough_outlet_height = metal_trough_outlet_height
+        self.metal_trough_outlet_width = metal_trough_outlet_width
+        self.slag_trough_outlet_slag_Cd = slag_trough_outlet_slag_Cd
+        self.slag_trough_outlet_metal_Cd = slag_trough_outlet_metal_Cd
+        self.metal_trough_outlet_slag_Cd = metal_trough_outlet_slag_Cd
+        self.metal_trough_outlet_metal_Cd = metal_trough_outlet_metal_Cd
         self.density_metal = density_metal
         self.density_slag = density_slag
-        self.metal_section_vdotmetal_out = 0
-        self.metal_section_vdotslag_out = 0
-        self.slag_section_vdotmetal_out = 0
-        self.slag_section_vdotslag_out = 0
-        self.metal_section_hmetal = 0
-        self.metal_section_hslag = 0
-        self.slag_section_hmetal = 0
-        self.slag_section_hslag = 0
+        self.metal_trough_vdotmetal_out = 0
+        self.metal_trough_vdotslag_out = 0
+        self.slag_trough_vdotmetal_out = 0
+        self.slag_trough_vdotslag_out = 0
+        self.metal_trough_hmetal = 0
+        self.metal_trough_hslag = 0
+        self.slag_trough_hmetal = 0
+        self.slag_trough_hslag = 0
         self.outlet_premult = 2 / 3 * numpy.sqrt(g)
 
     def _levels_to_volumes(self, hm_ss, hs_ss, hm_ms, hs_ms):
-        if self.slag_section_shape == "box":
-            dVdh = self.slag_section_length * self.slag_section_width
-            Vm_ss = dVdh * hm_ss
-            Vs_ss = dVdh * (hs_ss - hm_ss)
-        elif self.slag_section_shape == "v":
-            raise NotImplementedError("V profile launders not implemented yet.")
-        else:
-            raise NotImplementedError(f"Unknown slag launder profile '{self.slag_section_shape}'")
-
-        if self.metal_section_shape == "box":
-            dVdh = self.metal_section_length * self.metal_section_width
-            Vm_ms = dVdh * hm_ms
-            Vs_ms = dVdh * (hs_ms - hm_ms)
-        elif self.slag_section_shape == "v":
-            raise NotImplementedError("V profile launders not implemented yet.")
-        else:
-            raise NotImplementedError(
-                f"Unknown metal launder profile '{self.metal_section_shape}'"
-            )
-
+        # slag section
+        H, L = self.slag_trough_height, self.slag_trough_length
+        W0 = self.slag_trough_lower_width
+        dW = self.slag_trough_upper_width - self.slag_trough_lower_width
+        Vm_ss = L * hm_ss * (2 * H * W0 + hm_ss * dW) / (2 * H)
+        Vs_ss = L * (hs_ss - hm_ss) * (2 * H * W0 + (hs_ss + hm_ss) * dW) / (2 * H)
+        # metal section
+        H, L = self.metal_trough_height, self.metal_trough_length
+        W0 = self.metal_trough_lower_width
+        dW = self.metal_trough_upper_width - self.metal_trough_lower_width
+        Vm_ms = L * hm_ms * (2 * H * W0 + hm_ms * dW) / (2 * H)
+        Vs_ms = L * (hs_ms - hm_ms) * (2 * H * W0 + (hs_ms + hm_ms) * dW) / (2 * H)
         return Vm_ss, Vs_ss, Vm_ms, Vs_ms
 
     def _volumes_to_levels(self, Vm_ss, Vs_ss, Vm_ms, Vs_ms):
-        if self.slag_section_shape == "box":
-            dhdV = 1 / (self.slag_section_length * self.slag_section_width)
-            hm_ss = dhdV * Vm_ss
-            hs_ss = hm_ss + dhdV * Vs_ss
-        elif self.slag_section_shape == "v":
-            raise NotImplementedError("V profile launders not implemented yet.")
+        # slag section
+        H, L = self.slag_trough_height, self.slag_trough_length
+        W0 = self.slag_trough_lower_width
+        dW = self.slag_trough_upper_width - self.slag_trough_lower_width
+        if numpy.isclose(dW, 0):
+            hm_ss = Vm_ss / (L * W0)
+            hs_ss = hm_ss + Vs_ss / (L * W0)
         else:
-            raise NotImplementedError(f"Unknown slag launder profile '{self.slag_section_shape}'")
-
-        if self.metal_section_shape == "box":
-            dhdV = 1 / (self.metal_section_length * self.metal_section_width)
-            hm_ms = dhdV * Vm_ms
-            hs_ms = hm_ms + dhdV * Vs_ms
-        elif self.slag_section_shape == "v":
-            raise NotImplementedError("V profile launders not implemented yet.")
+            hm_ss = (numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW) / L) - H * W0) / dW
+            hs_ss = (
+                numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW + 2 * Vs_ss * dW) / L) - H * W0
+            ) / dW
+        # metal section
+        H, L = self.metal_trough_height, self.metal_trough_length
+        W0 = self.metal_trough_lower_width
+        dW = self.metal_trough_upper_width - self.metal_trough_lower_width
+        if numpy.isclose(dW, 0):
+            hm_ms = Vm_ms / (L * W0)
+            hs_ms = hm_ms + Vs_ms / (L * W0)
         else:
-            raise NotImplementedError(
-                f"Unknown metal launder profile '{self.metal_section_shape}'"
-            )
-
+            hm_ms = (numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW) / L) - H * W0) / dW
+            hs_ms = (
+                numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW + 2 * Vs_ms * dW) / L) - H * W0
+            ) / dW
         return hm_ss, hs_ss, hm_ms, hs_ms
 
     def _calc_vdot_out(self, dt):
@@ -181,94 +185,91 @@ class SkimmerLaunder:
         None.
 
         """
-        xarea_ss = self.slag_section_length * self.slag_section_width
-        xarea_ms = self.metal_section_length * self.metal_section_width
-
         # slag section
-        if self.slag_section_hslag < self.slag_outlet_height:
+        if self.slag_trough_hslag < self.slag_trough_outlet_height:
             # slag and metal are both below outlet
-            self.slag_section_vdotmetal_out = 0
-            self.slag_section_vdotslag_out = 0
+            self.slag_trough_vdotmetal_out = 0
+            self.slag_trough_vdotslag_out = 0
         else:
             # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
             #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
             #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
             vfrac = 0
-            if self.slag_section_hmetal < self.slag_outlet_height:
+            if self.slag_trough_hmetal < self.slag_trough_outlet_height:
                 # slag is above outlet, metal is below outlet
-                # TODO need to correct slag phase density for entrained metal?
-                h1 = self.slag_section_hslag - self.slag_outlet_height
+                # TODO need to correct slag phase density if entrained metal is present?
+                h1 = self.slag_trough_hslag - self.slag_trough_outlet_height
                 qslag = (
                     self.outlet_premult
-                    * self.slag_outlet_slag_Cd
-                    * self.slag_outlet_width
+                    * self.slag_trough_outlet_slag_Cd
+                    * self.slag_trough_outlet_width
                     * h1**1.5
                 )
-                self.slag_section_vdotmetal_out = vfrac * qslag
-                self.slag_section_vdotslag_out = (1 - vfrac) * qslag
+                self.slag_trough_vdotmetal_out = vfrac * qslag
+                self.slag_trough_vdotslag_out = (1 - vfrac) * qslag
             else:
                 # slag and metal are both above outlet
-                # TODO need to correct slag phase density for entrained metal?
-                h1 = self.slag_section_hslag - self.slag_section_hmetal
-                h2 = self.slag_section_hmetal - self.slag_outlet_height
+                # TODO need to correct slag phase density if entrained metal is present?
+                h1 = self.slag_trough_hslag - self.slag_trough_hmetal
+                h2 = self.slag_trough_hmetal - self.slag_trough_outlet_height
                 rho_ratio = self.density_slag / self.density_metal
                 qslag = (
                     self.outlet_premult
-                    * self.slag_outlet_slag_Cd
-                    * self.slag_outlet_width
+                    * self.slag_trough_outlet_slag_Cd
+                    * self.slag_trough_outlet_width
                     * h1**1.5
                 )
                 qmetal = (
                     self.outlet_premult
-                    * self.slag_outlet_metal_Cd
-                    * self.slag_outlet_width
+                    * self.slag_trough_outlet_metal_Cd
+                    * self.slag_trough_outlet_width
                     * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
                 )
-                self.slag_section_vdotmetal_out = qmetal + vfrac * qslag
-                self.slag_section_vdotslag_out = (1 - vfrac) * qslag
+                self.slag_trough_vdotmetal_out = qmetal + vfrac * qslag
+                self.slag_trough_vdotslag_out = (1 - vfrac) * qslag
 
         # metal section
-        if self.metal_section_hslag < self.metal_outlet_height:
+        if self.metal_trough_hslag < self.metal_trough_outlet_height:
             # slag and metal are both below outlet
-            self.metal_section_vdotmetal_out = 0
-            self.metal_section_vdotslag_out = 0
+            self.metal_trough_vdotmetal_out = 0
+            self.metal_trough_vdotslag_out = 0
         else:
             # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
             #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
             #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
             vfrac = 0
-            if self.metal_section_hmetal < self.metal_outlet_height:
+            if self.metal_trough_hmetal < self.metal_trough_outlet_height:
                 # slag is above outlet, metal is below outlet
-                # TODO need to correct slag phase density for entrained metal?
-                h1 = self.metal_section_hslag - self.metal_outlet_height
+                # TODO need to correct slag phase density if entrained metal is present?
+                h1 = self.metal_trough_hslag - self.metal_trough_outlet_height
                 qslag = (
                     self.outlet_premult
-                    * self.metal_outlet_slag_Cd
-                    * self.metal_outlet_width
+                    * self.metal_trough_outlet_slag_Cd
+                    * self.metal_trough_outlet_width
                     * h1**1.5
                 )
-                self.metal_section_vdotmetal_out = vfrac * qslag
-                self.metal_section_vdotslag_out = (1 - vfrac) * qslag
+                self.metal_trough_vdotmetal_out = vfrac * qslag
+                self.metal_trough_vdotslag_out = (1 - vfrac) * qslag
             else:
                 # slag and metal are both above outlet
-                # TODO need to correct slag phase density for entrained metal?
-                h1 = self.metal_section_hslag - self.metal_section_hmetal
-                h2 = self.metal_section_hmetal - self.metal_outlet_height
+                # TODO need to correct slag phase density if entrained metal is present?
+                h1 = self.metal_trough_hslag - self.metal_trough_hmetal
+                h2 = self.metal_trough_hmetal - self.metal_trough_outlet_height
                 rho_ratio = self.density_slag / self.density_metal
                 qslag = (
                     self.outlet_premult
-                    * self.metal_outlet_slag_Cd
-                    * self.metal_outlet_width
+                    * self.metal_trough_outlet_slag_Cd
+                    * self.metal_trough_outlet_width
                     * h1**1.5
                 )
                 qmetal = (
                     self.outlet_premult
-                    * self.metal_outlet_metal_Cd
-                    * self.metal_outlet_width
+                    * self.metal_trough_outlet_metal_Cd
+                    * self.metal_trough_outlet_width
                     * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
                 )
-                self.metal_section_vdotmetal_out = qmetal + vfrac * qslag
-                self.metal_section_vdotslag_out = (1 - vfrac) * qslag
+                self.metal_trough_vdotmetal_out = qmetal + vfrac * qslag
+                self.metal_trough_vdotslag_out = (1 - vfrac) * qslag
 
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
@@ -297,30 +298,30 @@ class SkimmerLaunder:
 
         A_w = self.weir_underflow_height * self.weir_underflow_width
         P_ss = (
-            self.slag_section_hmetal * self.density_metal * g
-            + (self.slag_section_hslag - self.slag_section_hmetal) * self.density_slag * g
+            self.slag_trough_hmetal * self.density_metal * g
+            + (self.slag_trough_hslag - self.slag_trough_hmetal) * self.density_slag * g
         )
         P_ms = (
-            self.metal_section_hmetal * self.density_metal * g
-            + (self.metal_section_hmetal - self.metal_section_hmetal) * self.density_slag * g
+            self.metal_trough_hmetal * self.density_metal * g
+            + (self.metal_trough_hmetal - self.metal_trough_hmetal) * self.density_slag * g
         )
         deltaP = P_ss - P_ms
         u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
         u_sw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_slag)
 
         # slag-metal interface in slag section is above weir underflow channel
-        if self.slag_section_hmetal > self.weir_underflow_height:
+        if self.slag_trough_hmetal > self.weir_underflow_height:
             vdot_metal_12 = A_w * u_mw
             vdot_slag_12 = 0
         # slag-metal interface in slag section is below weir underflow channel
-        elif self.slag_section_hslag > self.weir_underflow_height:
-            vdot_metal_12 = self.slag_section_hmetal / self.weir_underflow_height * A_w * u_mw
-            vdot_slag_12 = (1 - self.slag_section_hmetal / self.weir_underflow_height) * A_w * u_sw
+        elif self.slag_trough_hslag > self.weir_underflow_height:
+            vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
+            vdot_slag_12 = (1 - self.slag_trough_hmetal / self.weir_underflow_height) * A_w * u_sw
         # free surface in slag section is below weir underflow channel
         else:
-            vdot_metal_12 = self.slag_section_hmetal / self.weir_underflow_height * A_w * u_mw
+            vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
             vdot_slag_12 = (
-                ((self.slag_section_hslag - self.slag_section_hmetal) / self.weir_underflow_height)
+                ((self.slag_trough_hslag - self.slag_trough_hmetal) / self.weir_underflow_height)
                 * A_w
                 * u_sw
             )
@@ -338,18 +339,18 @@ class SkimmerLaunder:
         )
         V_0 = numpy.array(
             self._levels_to_volumes(
-                self.slag_section_hmetal,
-                self.slag_section_hslag,
-                self.metal_section_hmetal,
-                self.metal_section_hslag,
+                self.slag_trough_hmetal,
+                self.slag_trough_hslag,
+                self.metal_trough_hmetal,
+                self.metal_trough_hslag,
             )
         )
         V_new = V_0 + V_deltas
         (
-            self.slag_section_hmetal,
-            self.slag_section_hslag,
-            self.metal_section_hmetal,
-            self.metal_section_hslag,
+            self.slag_trough_hmetal,
+            self.slag_trough_hslag,
+            self.metal_trough_hmetal,
+            self.metal_trough_hslag,
         ) = self._volumes_to_levels(*V_new)
 
         # FRACTIONAL TIME STEP - EMPTYING
@@ -357,26 +358,26 @@ class SkimmerLaunder:
         V_deltas = (
             numpy.array(
                 [
-                    -self.slag_section_vdotmetal_out,
-                    -self.slag_section_vdotslag_out,
-                    -self.metal_section_vdotmetal_out,
-                    -self.metal_section_vdotslag_out,
+                    -self.slag_trough_vdotmetal_out,
+                    -self.slag_trough_vdotslag_out,
+                    -self.metal_trough_vdotmetal_out,
+                    -self.metal_trough_vdotslag_out,
                 ]
             )
             * dt
         )
         V_0 = numpy.array(
             self._levels_to_volumes(
-                self.slag_section_hmetal,
-                self.slag_section_hslag,
-                self.metal_section_hmetal,
-                self.metal_section_hslag,
+                self.slag_trough_hmetal,
+                self.slag_trough_hslag,
+                self.metal_trough_hmetal,
+                self.metal_trough_hslag,
             )
         )
         V_new = V_0 + V_deltas
         (
-            self.slag_section_hmetal,
-            self.slag_section_hslag,
-            self.metal_section_hmetal,
-            self.metal_section_hslag,
+            self.slag_trough_hmetal,
+            self.slag_trough_hslag,
+            self.metal_trough_hmetal,
+            self.metal_trough_hslag,
         ) = self._volumes_to_levels(*V_new)
