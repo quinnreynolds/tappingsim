@@ -470,7 +470,11 @@ class SkimmerLaunder:
 
         Note
         ----
-        The explicit time integration is only accurate for small values of dt.
+        The explicit time integration is only accurate for small values of dt, and is
+        unstable for large values: the state can oscillate between two values on
+        alternate steps instead of converging to a steady state. The largest stable step
+        size depends on the trough geometry, underflow channel size and flowrates. For the
+        troughs in the unit tests, dt = 0.1 s is stable and dt = 0.5 s is not.
 
         """
         # Assumptions and conventions:
