@@ -60,9 +60,125 @@ class SkimmerLaunder:
     The trough sections are assumed to have a trapezoidal cross section, and are defined by
     length, height, and lower and upper trough widths.
 
+    Parameters
+    ----------
+    slag_trough_length : float
+        The internal length of the pre-weir (slag) trough, m.
+    slag_trough_upper_width : float
+        The internal width of the slag trough at the top of the trough, m.
+    slag_trough_lower_width : float
+        The internal width of the slag trough at the floor of the trough, m.
+    slag_trough_height : float
+        The internal height of the slag trough, m.
+    slag_trough_outlet_height : float
+        The height of the slag trough overflow outlet crest above the trough floor, m.
+    slag_trough_outlet_width : float
+        The width of the slag trough overflow outlet, m.
+    weir_underflow_height : float
+        The height of the underflow channel under the weir, measured from the trough floor, m.
+    weir_underflow_width : float
+        The width of the underflow channel under the weir, m.
+    metal_trough_length : float
+        The internal length of the post-weir (metal) trough, m.
+    metal_trough_upper_width : float
+        The internal width of the metal trough at the top of the trough, m.
+    metal_trough_lower_width : float
+        The internal width of the metal trough at the floor of the trough, m.
+    metal_trough_height : float
+        The internal height of the metal trough, m.
+    metal_trough_outlet_height : float
+        The height of the metal trough overflow outlet crest above the trough floor, m.
+    metal_trough_outlet_width : float
+        The width of the metal trough overflow outlet, m.
+    slag_trough_outlet_slag_Cd : float
+        Discharge coefficient for the slag phase leaving through the slag trough outlet,
+        dimensionless.
+    slag_trough_outlet_metal_Cd : float
+        Discharge coefficient for the metal phase leaving through the slag trough outlet,
+        dimensionless.
+    metal_trough_outlet_slag_Cd : float
+        Discharge coefficient for the slag phase leaving through the metal trough outlet,
+        dimensionless.
+    metal_trough_outlet_metal_Cd : float
+        Discharge coefficient for the metal phase leaving through the metal trough outlet,
+        dimensionless.
+    density_metal : float
+        The density of the metal phase, kg/m3.
+    density_slag : float
+        The density of the slag phase, kg/m3.
+
     Attributes
     ----------
-    TODO
+    slag_trough_length : float
+        The internal length of the pre-weir (slag) trough, m.
+    slag_trough_upper_width : float
+        The internal width of the slag trough at the top, m.
+    slag_trough_lower_width : float
+        The internal width of the slag trough at the floor, m.
+    slag_trough_height : float
+        The internal height of the slag trough, m.
+    slag_trough_outlet_height : float
+        The height of the slag trough outlet crest above the floor, m.
+    slag_trough_outlet_width : float
+        The width of the slag trough overflow outlet, m.
+    weir_underflow_height : float
+        The height of the underflow channel under the weir, m.
+    weir_underflow_width : float
+        The width of the underflow channel under the weir, m.
+    metal_trough_length : float
+        The internal length of the post-weir (metal) trough, m.
+    metal_trough_upper_width : float
+        The internal width of the metal trough at the top, m.
+    metal_trough_lower_width : float
+        The internal width of the metal trough at the floor, m.
+    metal_trough_height : float
+        The internal height of the metal trough, m.
+    metal_trough_outlet_height : float
+        The height of the metal trough outlet crest above the floor, m.
+    metal_trough_outlet_width : float
+        The width of the metal trough overflow outlet, m.
+    slag_trough_outlet_slag_Cd : float
+        Slag discharge coefficient of the slag trough outlet.
+    slag_trough_outlet_metal_Cd : float
+        Metal discharge coefficient of the slag trough outlet.
+    metal_trough_outlet_slag_Cd : float
+        Slag discharge coefficient of the metal trough outlet.
+    metal_trough_outlet_metal_Cd : float
+        Metal discharge coefficient of the metal trough outlet.
+    density_metal : float
+        The density of the metal phase, kg/m3.
+    density_slag : float
+        The density of the slag phase, kg/m3.
+    slag_trough_hmetal : float
+        The current level of metal in the slag trough, m.
+    slag_trough_hslag : float
+        The current level of the top of the slag layer in the slag trough, m. Levels are
+        measured from the trough floor, so this is the total bath depth and not the slag
+        layer thickness.
+    metal_trough_hmetal : float
+        The current level of metal in the metal trough, m.
+    metal_trough_hslag : float
+        The current level of the top of the slag layer in the metal trough, m. Measured from
+        the trough floor, as for the slag trough.
+    slag_trough_vdotmetal_out : float
+        The current outlet volume flowrate of metal from the slag trough overflow, m3/s.
+    slag_trough_vdotslag_out : float
+        The current outlet volume flowrate of slag from the slag trough overflow, m3/s.
+    metal_trough_vdotmetal_out : float
+        The current outlet volume flowrate of metal from the metal trough overflow, m3/s.
+    metal_trough_vdotslag_out : float
+        The current outlet volume flowrate of slag from the metal trough overflow, m3/s.
+    outlet_premult : float
+        Constant pre-multiplier, 2/3*sqrt(g), in the overflow outlet flow expressions.
+
+    Note
+    ----
+    Both troughs are initially empty. Material enters the slag trough, and flows to the metal
+    trough through the underflow channel under the weir, driven by the difference in
+    hydrostatic pressure between the two troughs. Each trough drains through its own
+    open-channel overflow outlet, which is modelled as a broad-crested weir with flowrate
+    proportional to the overflow head to the power 3/2. Metal entrainment in the overflow
+    streams is not yet modelled, so the slag outflows are currently free of metal.
 
     """
 
@@ -125,6 +241,30 @@ class SkimmerLaunder:
         self.outlet_premult = 2 / 3 * numpy.sqrt(g)
 
     def _levels_to_volumes(self, hm_ss, hs_ss, hm_ms, hs_ms):
+        """Convert phase levels in the two troughs to phase volumes.
+
+        The trough width varies linearly with height, so the cross-sectional area up to a
+        level h is h*(W0 + 0.5*dW*h/H), where W0 is the lower width, dW is the difference
+        between upper and lower widths, and H is the trough height.
+
+        Parameters
+        ----------
+        hm_ss : float
+            Level of metal in the slag trough, m.
+        hs_ss : float
+            Level of the top of the slag layer in the slag trough, m.
+        hm_ms : float
+            Level of metal in the metal trough, m.
+        hs_ms : float
+            Level of the top of the slag layer in the metal trough, m.
+
+        Returns
+        -------
+        tuple of float
+            Volume of metal in the slag trough, volume of slag in the slag trough, volume of
+            metal in the metal trough, and volume of slag in the metal trough, m3.
+
+        """
         # slag section
         H, L = self.slag_trough_height, self.slag_trough_length
         W0 = self.slag_trough_lower_width
@@ -140,6 +280,31 @@ class SkimmerLaunder:
         return Vm_ss, Vs_ss, Vm_ms, Vs_ms
 
     def _volumes_to_levels(self, Vm_ss, Vs_ss, Vm_ms, Vs_ms):
+        """Convert phase volumes in the two troughs to phase levels.
+
+        This is the inverse of _levels_to_volumes, obtained by solving the quadratic
+        relationship between trough volume and level. A straight-walled trough (upper and
+        lower widths equal) is handled separately to avoid division by zero.
+
+        Parameters
+        ----------
+        Vm_ss : float
+            Volume of metal in the slag trough, m3.
+        Vs_ss : float
+            Volume of slag in the slag trough, m3.
+        Vm_ms : float
+            Volume of metal in the metal trough, m3.
+        Vs_ms : float
+            Volume of slag in the metal trough, m3.
+
+        Returns
+        -------
+        tuple of float
+            Level of metal in the slag trough, level of the top of the slag layer in the slag
+            trough, level of metal in the metal trough, and level of the top of the slag
+            layer in the metal trough, m.
+
+        """
         # slag section
         H, L = self.slag_trough_height, self.slag_trough_length
         W0 = self.slag_trough_lower_width
@@ -168,12 +333,18 @@ class SkimmerLaunder:
 
     def _calc_vdot_out(self, dt):
         """Calculate volumetric outflow rates of metal and slag from the slag and metal
-        section outlets for the current state, and update the vdotmetal_out and
-        vdotslag_out attributes.
+        trough outlets for the current state, and update the slag_trough_vdotmetal_out,
+        slag_trough_vdotslag_out, metal_trough_vdotmetal_out and metal_trough_vdotslag_out
+        attributes.
 
-        Overflow occurs when the total bath level exceeds the ladle depth.
-        TODO: Metal entrainment in the slag outflow is calculated using the
-        configured overflow model.
+        Overflow from a trough occurs when the top of the slag layer exceeds the outlet
+        crest height. Each phase flows over the outlet as over a broad-crested weir, with
+        flowrate proportional to Cd*width*head**1.5. If the metal level is also above the
+        crest, the slag layer head is the slag layer thickness, and the metal head is
+        expressed as an equivalent metal head by scaling the slag layer thickness by the
+        density ratio of slag to metal.
+        TODO: Metal entrainment in the slag outflow is currently set to zero, pending
+        implementation of overflow models as used in the ladle classes.
 
         Parameters
         ----------
@@ -276,18 +447,30 @@ class SkimmerLaunder:
         Integrate object state forward over a single time step, and update
         output flowrates.
 
+        The flowrates through the weir underflow channel are calculated from the hydrostatic
+        pressure difference between the troughs, using the Bernoulli equation for the
+        velocity of each phase. Depending on the position of the slag-metal interface and
+        the free surface relative to the top of the underflow channel, the channel is
+        filled by metal, by metal and slag, or only partially filled. The outlet flowrates
+        are then updated, and the phase volumes in each trough are advanced with a single
+        forward Euler step.
+
         Parameters
         ----------
         dt : float
             Length of time step, in s.
         vdotmetal_in : float
-            Flowrate of metal into the launder, m3/s.
+            Flowrate of metal into the slag trough, m3/s.
         vdotslag_in : float
-            Flowrate of slag into the launder, m3/s.
+            Flowrate of slag into the slag trough, m3/s.
 
         Returns
         -------
         None.
+
+        Note
+        ----
+        The explicit time integration is only accurate for small values of dt.
 
         """
         # Assumptions and conventions:
