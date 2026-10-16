@@ -484,7 +484,7 @@ class SkimmerLaunder:
         )
         P_ms = (
             self.metal_trough_hmetal * self.density_metal * g
-            + (self.metal_trough_hmetal - self.metal_trough_hmetal) * self.density_slag * g
+            + (self.metal_trough_hslag - self.metal_trough_hmetal) * self.density_slag * g
         )
         deltaP = P_ss - P_ms
         u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
