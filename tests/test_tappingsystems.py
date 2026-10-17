@@ -56,6 +56,8 @@ def saf_with_ladles_system(furnace_params):
         CylindricalLadle(
             diameter=1.8, depth=2.0, hmetal_init=0, hslag_init=0,
             overflowmodel=overflowmodel_step, overflowconsts=[],
+            outlet_width=0.3, outlet_slag_Cd=0.6, outlet_metal_Cd=0.6,
+            density_metal=7000, density_slag=3000,
         )
         for _ in range(3)
     ]

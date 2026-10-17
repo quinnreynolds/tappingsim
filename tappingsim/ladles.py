@@ -161,16 +161,14 @@ def overflow_flowrates(hmetal, hslag, crest_height, width, slag_Cd, metal_Cd,
 
 
 class CylindricalLadle():
-    """Tapping ladle class. This version is a cylindrical ladle with a
-    choice of empirical overflow models.
+    """Tapping ladle class. This version is a cylindrical ladle with an
+    open-channel overflow outlet and a choice of empirical overflow models.
 
-    By default, the overflow is instantaneous: any volume above the ladle
-    depth is removed within the time step, so the levels never exceed the
-    depth at the end of a step. Alternatively, if the outlet_width parameter
-    is provided, the overflow is calculated as open-channel flow over a
+    Metal and slag overflow the ladle as open-channel flow over a
     broad-crested weir outlet with its crest at the ladle depth (see
-    overflow_flowrates). The levels then rise above the depth until the
-    flowrate over the outlet matches the inflow.
+    overflow_flowrates). The levels rise above the depth until the flowrate
+    over the outlet matches the inflow. The metal entrained in the slag
+    flowing over the outlet is described by the chosen overflow model.
 
     Parameters
     ----------
@@ -187,24 +185,22 @@ class CylindricalLadle():
         Function to be used to model the phase overflow behaviour.
     overflowconsts : list of float
         Empirical parameters for the chosen overflow model.
-    outlet_width : float, optional
-        The width of the overflow outlet, m. If provided, the open-channel
-        overflow calculation is used, and outlet_slag_Cd, outlet_metal_Cd,
-        density_metal and density_slag must also be provided.
-    outlet_slag_Cd : float, optional
+    outlet_width : float
+        The width of the overflow outlet, m.
+    outlet_slag_Cd : float
         Discharge coefficient for the slag phase over the outlet,
         dimensionless.
-    outlet_metal_Cd : float, optional
+    outlet_metal_Cd : float
         Discharge coefficient for the metal phase over the outlet,
         dimensionless.
-    density_metal : float, optional
+    density_metal : float
         The density of the metal phase, kg/m3.
-    density_slag : float, optional
+    density_slag : float
         The density of the slag phase, kg/m3.
     max_substep : float, optional
-        For the open-channel overflow calculation, the longest internal time
-        step used by calc_dt, in s. Longer time steps are divided into equal
-        sub-steps no longer than this. The default is 1 s.
+        The longest internal time step used by calc_dt, in s. Longer time
+        steps are divided into equal sub-steps no longer than this. The
+        default is 1 s.
 
     Attributes
     ----------
@@ -218,20 +214,18 @@ class CylindricalLadle():
         The current level of slag in the ladle, m.
     overflowmodel : function
         Reference to internal lambda function created for overflow modelling.
-    outlet_width : float or None
-        The width of the overflow outlet, m, or None if the instantaneous
-        overflow calculation is used.
-    outlet_slag_Cd : float or None
+    outlet_width : float
+        The width of the overflow outlet, m.
+    outlet_slag_Cd : float
         Discharge coefficient for the slag phase over the outlet.
-    outlet_metal_Cd : float or None
+    outlet_metal_Cd : float
         Discharge coefficient for the metal phase over the outlet.
-    density_metal : float or None
+    density_metal : float
         The density of the metal phase, kg/m3.
-    density_slag : float or None
+    density_slag : float
         The density of the slag phase, kg/m3.
     max_substep : float
-        The longest internal time step used by calc_dt for the open-channel
-        overflow calculation, in s.
+        The longest internal time step used by calc_dt, in s.
     vdotmetal_out : float
         The current outlet volume flowrate of metal from the unit, m3/s.
     vdotslag_out : float
@@ -239,17 +233,16 @@ class CylindricalLadle():
 
     Note
     ----
-    The open-channel overflow calculation integrates the state with a
-    linearly-implicit (Rosenbrock-Euler) scheme, as used by the skimmer
-    launder. It is first order in time and stable for any time step, as the
-    flowrate over the outlet becomes stiffer for large heads. The outlet
-    flowrates reported after calc_dt are the effective flowrates averaged over
-    the time step, so that the change in the volumes held in the ladle is
-    exactly the volume added by the inflows less the volume leaving over the
-    outlet. If a step would produce negative phase volumes, which can happen
-    for very wide outlets relative to the time step, it is repeated as
-    smaller steps. The ladle walls are assumed to be high enough that the
-    contents do not spill elsewhere.
+    The state is integrated in time with a linearly-implicit (Rosenbrock-Euler)
+    scheme, as used by the skimmer launder. It is first order in time and
+    stable for any time step, as the flowrate over the outlet becomes stiffer
+    for large heads. The outlet flowrates reported after calc_dt are the
+    effective flowrates averaged over the time step, so that the change in the
+    volumes held in the ladle is exactly the volume added by the inflows less
+    the volume leaving over the outlet. If a step would produce negative phase
+    volumes, which can happen for very wide outlets relative to the time step,
+    it is repeated as smaller steps. The ladle walls are assumed to be high
+    enough that the contents do not spill elsewhere.
 
     """
 
@@ -258,22 +251,11 @@ class CylindricalLadle():
     _JACOBIAN_EPS = 1e-7
 
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
-                 overflowmodel, overflowconsts, outlet_width=None,
-                 outlet_slag_Cd=None, outlet_metal_Cd=None,
-                 density_metal=None, density_slag=None, max_substep=1.0):
-        open_channel_args = (outlet_slag_Cd, outlet_metal_Cd, density_metal,
-                             density_slag)
-        if outlet_width is None:
-            if any(arg is not None for arg in open_channel_args):
-                raise ValueError("outlet_width is required for the "
-                                 "open-channel overflow calculation")
-        else:
-            if any(arg is None for arg in open_channel_args):
-                raise ValueError("outlet_slag_Cd, outlet_metal_Cd, "
-                                 "density_metal and density_slag are "
-                                 "required with outlet_width")
-            if outlet_width <= 0:
-                raise ValueError("outlet_width must be positive")
+                 overflowmodel, overflowconsts, outlet_width, outlet_slag_Cd,
+                 outlet_metal_Cd, density_metal, density_slag,
+                 max_substep=1.0):
+        if outlet_width <= 0:
+            raise ValueError("outlet_width must be positive")
         if max_substep <= 0:
             raise ValueError("max_substep must be positive")
         self.diameter = diameter
@@ -289,48 +271,6 @@ class CylindricalLadle():
         self.max_substep = max_substep
         self.vdotmetal_out = 0
         self.vdotslag_out = 0
-
-    def _calc_vdot_out(self, dt):
-        """Calculate volumetric outflow rates of metal and slag from the ladle
-        for the current state, and update the vdotmetal_out and vdotslag_out
-        attributes.
-
-        Overflow occurs when the total bath level exceeds the ladle depth.
-        Metal entrainment in the slag outflow is calculated using the
-        configured overflow model. If the open-channel overflow calculation
-        is not used, all of the volume above the ladle depth is removed over
-        the time step, otherwise the flowrates are calculated by
-        overflow_flowrates.
-
-        Parameters
-        ----------
-        dt : float
-            Length of time step, in s.
-
-        Returns
-        -------
-        None.
-
-        """
-        if self.outlet_width is not None:
-            self.vdotmetal_out, self.vdotslag_out = self._calc_flows(
-                self.hmetal, self.hslag)
-            return
-        xarea = 0.25 * pi * self.diameter**2
-        if self.hslag < self.depth:
-            self.vdotmetal_out = 0
-            self.vdotslag_out = 0
-        else:
-            vfrac = self.overflowmodel(self.depth - self.hmetal)
-            if self.hmetal < self.depth:
-                vslagout = (self.hslag - self.depth) * xarea
-                self.vdotmetal_out = vslagout * vfrac / dt
-                self.vdotslag_out = vslagout * (1 - vfrac) / dt
-            else:
-                vslagout = (self.hslag - self.hmetal) * xarea
-                self.vdotmetal_out = ((self.hmetal - self.depth) * xarea
-                                      + vslagout * vfrac) / dt
-                self.vdotslag_out = vslagout * (1 - vfrac) / dt
 
     def _calc_flows(self, hmetal, hslag):
         """Calculate the open-channel flowrates of metal and slag over the
@@ -354,9 +294,9 @@ class CylindricalLadle():
             self.outlet_metal_Cd, self.density_slag / self.density_metal,
             self.overflowmodel)
 
-    def _step_open_channel(self, dt, vdotmetal_in, vdotslag_in):
+    def _step(self, dt, vdotmetal_in, vdotslag_in):
         """Advance the state over a single linearly-implicit (Rosenbrock-Euler)
-        step with open-channel overflow.
+        step.
 
         With the phase volumes V, the outflows q(V) and the inflows, the step
         is dV = dt*(I + dt*dq/dV)^-1 * (inflow - q), with dq/dV estimated by
@@ -400,10 +340,9 @@ class CylindricalLadle():
         self.hslag = self.hmetal + V_new[1] / xarea
         return q + dq_dV @ V_delta
 
-    def _advance_open_channel(self, dt, vdotmetal_in, vdotslag_in,
-                              halvings=30):
-        """Advance the state over a time step with open-channel overflow,
-        repeating the step as two half-steps if the result is not physical.
+    def _advance(self, dt, vdotmetal_in, vdotslag_in, halvings=30):
+        """Advance the state over a time step, repeating the step as two
+        half-steps if the result is not physical.
 
         A very large step relative to the stiffness of the flow over the
         outlet can overshoot to negative phase volumes. The step is then
@@ -428,7 +367,7 @@ class CylindricalLadle():
 
         """
         hmetal_0, hslag_0 = self.hmetal, self.hslag
-        flows = self._step_open_channel(dt, vdotmetal_in, vdotslag_in)
+        flows = self._step(dt, vdotmetal_in, vdotslag_in)
         tol = 1e-12
         if (numpy.isfinite(self.hslag) and self.hmetal > -tol
                 and self.hslag - self.hmetal > -tol):
@@ -440,15 +379,20 @@ class CylindricalLadle():
                                "time step with positive volumes")
         self.hmetal, self.hslag = hmetal_0, hslag_0
         return 0.5 * (
-            self._advance_open_channel(0.5 * dt, vdotmetal_in, vdotslag_in,
-                                       halvings - 1)
-            + self._advance_open_channel(0.5 * dt, vdotmetal_in, vdotslag_in,
-                                         halvings - 1))
+            self._advance(0.5 * dt, vdotmetal_in, vdotslag_in, halvings - 1)
+            + self._advance(0.5 * dt, vdotmetal_in, vdotslag_in, halvings - 1))
 
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
         Integrate object state forward over a single time step, and update
         output flowrates.
+
+        The time step is divided into equal sub-steps no longer than
+        max_substep, each integrated with a linearly-implicit scheme. The
+        inflow rates are held constant over the time step. The outlet
+        flowrates are set to the average of the flowrates over the sub-steps.
+        A ladle that stays below the crest over the whole time step is filled
+        exactly in a single step.
 
         Parameters
         ----------
@@ -465,30 +409,18 @@ class CylindricalLadle():
 
         """
         xarea = 0.25 * pi * self.diameter**2
-        if self.outlet_width is not None:
-            dhslag_noflow = dt * (vdotmetal_in + vdotslag_in) / xarea
-            if (self.hslag <= self.depth
-                    and self.hslag + dhslag_noflow <= self.depth):
-                # the levels only rise and stay below the crest: there is no
-                # outflow over the time step, and the filling is exact
-                self.hmetal += dt * vdotmetal_in / xarea
-                self.hslag += dhslag_noflow
-                self.vdotmetal_out = 0
-                self.vdotslag_out = 0
-                return
-            n_substeps = max(1, int(math.ceil(dt / self.max_substep)))
-            flows = sum(
-                self._advance_open_channel(dt / n_substeps, vdotmetal_in,
-                                           vdotslag_in)
-                for _ in range(n_substeps)) / n_substeps
-            self.vdotmetal_out, self.vdotslag_out = flows
+        dhslag_noflow = dt * (vdotmetal_in + vdotslag_in) / xarea
+        if (self.hslag <= self.depth
+                and self.hslag + dhslag_noflow <= self.depth):
+            # the levels only rise and stay below the crest: there is no
+            # outflow over the time step, and the filling is exact
+            self.hmetal += dt * vdotmetal_in / xarea
+            self.hslag += dhslag_noflow
+            self.vdotmetal_out = 0
+            self.vdotslag_out = 0
             return
-        dhmetal = dt * vdotmetal_in / xarea
-        dhslag = dt * vdotslag_in / xarea
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
-        self._calc_vdot_out(dt)
-        dhmetal = -dt * self.vdotmetal_out / xarea
-        dhslag = -dt * self.vdotslag_out / xarea
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
+        n_substeps = max(1, int(math.ceil(dt / self.max_substep)))
+        flows = sum(
+            self._advance(dt / n_substeps, vdotmetal_in, vdotslag_in)
+            for _ in range(n_substeps)) / n_substeps
+        self.vdotmetal_out, self.vdotslag_out = flows
