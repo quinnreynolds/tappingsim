@@ -6,8 +6,16 @@ post-treatment units.
 
 """
 
+import math
+
 import numpy
 from scipy.constants import g
+
+
+def _sqrt(x):
+    """Scalar square root, returning nan for negative input as numpy.sqrt does, but
+    several times faster than numpy.sqrt for scalar arguments."""
+    return math.sqrt(x) if x >= 0 else math.nan
 
 
 class SimpleSisoLaunder:
@@ -309,25 +317,26 @@ class SkimmerLaunder:
         H, L = self.slag_trough_height, self.slag_trough_length
         W0 = self.slag_trough_lower_width
         dW = self.slag_trough_upper_width - self.slag_trough_lower_width
-        if numpy.isclose(dW, 0):
+        # (abs(dW) <= 1e-8 is numpy.isclose(dW, 0) without the large scalar overhead)
+        if abs(dW) <= 1e-8:
             hm_ss = Vm_ss / (L * W0)
             hs_ss = hm_ss + Vs_ss / (L * W0)
         else:
-            hm_ss = (numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW) / L) - H * W0) / dW
+            hm_ss = (_sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW) / L) - H * W0) / dW
             hs_ss = (
-                numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW + 2 * Vs_ss * dW) / L) - H * W0
+                _sqrt(H * (H * L * W0**2 + 2 * Vm_ss * dW + 2 * Vs_ss * dW) / L) - H * W0
             ) / dW
         # metal section
         H, L = self.metal_trough_height, self.metal_trough_length
         W0 = self.metal_trough_lower_width
         dW = self.metal_trough_upper_width - self.metal_trough_lower_width
-        if numpy.isclose(dW, 0):
+        if abs(dW) <= 1e-8:
             hm_ms = Vm_ms / (L * W0)
             hs_ms = hm_ms + Vs_ms / (L * W0)
         else:
-            hm_ms = (numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW) / L) - H * W0) / dW
+            hm_ms = (_sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW) / L) - H * W0) / dW
             hs_ms = (
-                numpy.sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW + 2 * Vs_ms * dW) / L) - H * W0
+                _sqrt(H * (H * L * W0**2 + 2 * Vm_ms * dW + 2 * Vs_ms * dW) / L) - H * W0
             ) / dW
         return hm_ss, hs_ss, hm_ms, hs_ms
 
