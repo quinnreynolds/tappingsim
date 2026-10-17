@@ -526,10 +526,8 @@ class SkimmerLaunder:
         the error in the phase volumes is of the order of 1% of the trough volume or
         better, and it increases with the step size. Very large steps are unreliable, for
         example filling an empty launder in a single step of 10 s or more can produce
-        negative volumes.
-
-        The phase volumes are not constrained to stay positive, and a step that is large
-        relative to the stiffness of the flows can overshoot to negative volumes and levels.
+        negative volumes, which the integration avoids by repeating such steps as smaller
+        steps.
 
         """
         V, flows = integrate(
@@ -544,7 +542,6 @@ class SkimmerLaunder:
             self._FLOWS_TO_VOLUME_RATES,
             dt,
             self.max_substep,
-            positive=False,  # see the Note on negative volumes above
         )
         (
             self.slag_trough_hmetal,

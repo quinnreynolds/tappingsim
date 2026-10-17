@@ -594,3 +594,59 @@ class TestSkimmerLaunderWeirFlow:
         assert vdot_metal < 0
         assert vdot_slag == 0
 
+
+class TestSkimmerLaunderPhysicalVolumes:
+    """The phase volumes stay positive when the weir flow reverses and for large sub-steps."""
+
+    @staticmethod
+    def smallest_volume(launder):
+        return min(launder._levels_to_volumes(*levels(launder)))
+
+    def test_reversed_flow_conserves_volume_and_stays_positive(self, skimmer):
+        """A much fuller metal trough drains back through the weir."""
+        set_levels(skimmer, 0.05, 0.08, 0.45, 0.46)
+        assert weir_pressure_difference(skimmer) < 0
+        dt = 60.0
+        vmetal0, vslag0 = total_volumes(skimmer)
+        skimmer.calc_dt(dt, 0.0, 0.0)
+        vmetal1, vslag1 = total_volumes(skimmer)
+        metal_out = skimmer.slag_trough_vdotmetal_out + skimmer.metal_trough_vdotmetal_out
+        slag_out = skimmer.slag_trough_vdotslag_out + skimmer.metal_trough_vdotslag_out
+        assert vmetal1 - vmetal0 == pytest.approx(-metal_out * dt, abs=1e-9)
+        assert vslag1 - vslag0 == pytest.approx(-slag_out * dt, abs=1e-9)
+        assert self.smallest_volume(skimmer) >= 0
+
+    def test_draining_after_tap_shut_off_stays_positive(self):
+        """Regression test: with entrainment at the slag trough outlet, draining a launder
+        after the inflow stops used to give a negative slag volume, as the reversed weir flow
+        drew slag from a trough holding less than it removed."""
+        launder = make_skimmer(
+            slag_trough_overflowmodel=functools.partial(
+                overflowmodel_exp, premultiplier=0.4, decay=3.0
+            )
+        )
+        for _ in range(600):
+            launder.calc_dt(1.0, 0.03, 0.06)
+        for _ in range(2000):
+            launder.calc_dt(1.0, 0.0, 0.0)
+            assert self.smallest_volume(launder) >= -1e-12
+
+    def test_random_inflows_and_steps_stay_positive(self):
+        rng = numpy.random.default_rng(11)
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0),
+            metal_trough_overflowmodel=exp_model(0.3, 1.0),
+        )
+        for _ in range(300):
+            dt = rng.uniform(0.05, 60)
+            launder.calc_dt(dt, rng.uniform(0, 0.05), rng.uniform(0, 0.08))
+            assert self.smallest_volume(launder) >= -1e-12
+
+    def test_large_substeps_stay_positive(self):
+        """Sub-steps far beyond the accurate range are repeated as smaller steps instead of
+        overshooting to negative volumes."""
+        rng = numpy.random.default_rng(3)
+        launder = make_skimmer(max_substep=5.0)
+        for _ in range(200):
+            launder.calc_dt(20.0, rng.uniform(0, 0.05), rng.uniform(0, 0.08))
+            assert self.smallest_volume(launder) >= -1e-12
