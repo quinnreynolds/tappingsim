@@ -10,6 +10,7 @@ packed beds and tap-hole channels.
 """
 
 import math
+from collections import namedtuple
 
 import numpy
 from scipy.constants import g, pi
@@ -331,6 +332,281 @@ def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
         return 1 / (invsqrtf * invsqrtf)
 
 
+# Convergence tolerance of the iteration for the tap-hole velocities, as the
+# sum of the changes in the metal and slag velocities between iterations, m/s,
+# and the number of iterations after which the iteration is abandoned.
+_VELOCITY_TOLERANCE = 1e-6
+_VELOCITY_MAX_ITERATIONS = 100
+
+# Parameters of the tap-hole flow calculation at the start of a time step. The
+# burden coefficients (a_ and b_) are those of the pressure drop through the
+# burden and the tap-hole entrance, for each phase.
+_TapholeParams = namedtuple('_TapholeParams', [
+    'tapholediameter', 'tapholelength', 'tapholeheight', 'tapholeroughness',
+    'bedporosity', 'densitymetal', 'densityslag', 'viscositymetal',
+    'viscosityslag', 'fdmodel', 'tapholeopen_yn', 'allownegativeheights_yn',
+    'a_metal', 'b_metal', 'a_slag', 'b_slag'])
+
+
+def _tapping_pressure(hm, hs, rt, densitymetal, densityslag):
+    """Calculate the pressure driving the flow through the tap-hole.
+
+    The pressure is applied to both phases, based on undeformed interfaces. It
+    is the integrated pressure field over the height of the tap-hole, averaged
+    with the total height in the tap-hole.
+
+    Parameters
+    ----------
+    hm : float
+        Metal level relative to the tap-hole centreline, m.
+    hs : float
+        Slag level relative to the tap-hole centreline, m.
+    rt : float
+        Radius of the tap-hole, m.
+    densitymetal : float
+        Density of the molten metal phase, kg/m3.
+    densityslag : float
+        Density of the molten slag phase, kg/m3.
+
+    Returns
+    -------
+    float
+        The driving pressure, Pa.
+
+    """
+    if hs < -rt:
+        # liquid level below taphole - no flow
+        return 0
+    if hs < rt:
+        # liquid level between taphole limits
+        if hm < -rt:
+            # slag only
+            return 0.5 * g * (hs + rt) * densityslag
+        # slag and metal
+        return 0.5 * g * ((densitymetal * (hm + rt) * (hm + rt)
+                           + densityslag * (hs * (hs + 2 * rt)
+                                            - hm * (hm + 2 * rt))) / (hs + rt))
+    # liquid level above taphole
+    if hm < -rt:
+        # slag only
+        return hs * densityslag * g
+    if hm < rt:
+        # slag and metal
+        return 0.25 * g * ((densitymetal * (hm + rt) * (hm + rt)
+                            + densityslag * (rt * (4 * hs - rt)
+                                             - hm * (hm + 2 * rt))) / rt)
+    # metal only
+    return g * (densityslag * (hs - hm) + densitymetal * hm)
+
+
+def _solve_velocities(pa, umetal0, uslag0, params):
+    """Solve for the phase velocities in the tap-hole.
+
+    The velocity of each phase satisfies a quadratic pressure balance, with
+    the friction factor of the tap-hole channel depending on the velocity, so
+    the solution is found by iterating on the friction factors.
+
+    Parameters
+    ----------
+    pa : float
+        The pressure driving the flow, Pa.
+    umetal0 : float
+        Initial guess for metal velocity in tap-hole, m/s.
+    uslag0 : float
+        Initial guess for slag velocity in tap-hole, m/s.
+    params : _TapholeParams
+        Parameters of the tap-hole flow calculation.
+
+    Returns
+    -------
+    umetal : float
+        Velocity of metal through the tap-hole, m/s.
+    uslag : float
+        Velocity of slag through the tap-hole, m/s.
+
+    Raises
+    ------
+    RuntimeError
+        If the iteration has not converged after the maximum number of
+        iterations.
+
+    """
+    fdmodel, diameter, roughness = (params.fdmodel, params.tapholediameter,
+                                    params.tapholeroughness)
+    length = params.tapholelength
+    rho_m, rho_s = params.densitymetal, params.densityslag
+    mu_m, mu_s = params.viscositymetal, params.viscosityslag
+    a_m, b_m, a_s, b_s = (params.a_metal, params.b_metal, params.a_slag,
+                          params.b_slag)
+    umetal, uslag = umetal0, uslag0
+    for _ in range(_VELOCITY_MAX_ITERATIONS):
+        fdm = fdmodel(umetal, rho_m, mu_m, diameter, roughness)
+        fds = fdmodel(uslag, rho_s, mu_s, diameter, roughness)
+        a_mc = a_m + (0.5 * rho_m * fdm * length / diameter)
+        a_sc = a_s + (0.5 * rho_s * fds * length / diameter)
+        nvm = (-b_m + math.sqrt(b_m * b_m + 4 * pa * a_mc)) / (2 * a_mc)
+        nvs = (-b_s + math.sqrt(b_s * b_s + 4 * pa * a_sc)) / (2 * a_sc)
+        residual = abs(nvm - umetal) + abs(nvs - uslag)
+        umetal, uslag = nvm, nvs
+        if not residual > _VELOCITY_TOLERANCE:
+            return umetal, uslag
+    raise RuntimeError("the tap-hole velocity iteration did not converge in "
+                       f"{_VELOCITY_MAX_ITERATIONS} iterations")
+
+
+def _interface_levels(umetal, uslag, params):
+    """Calculate the deformation of the slag-metal interface by the flow.
+
+    Parameters
+    ----------
+    umetal : float
+        Velocity of metal through the tap-hole, m/s.
+    uslag : float
+        Velocity of slag through the tap-hole, m/s.
+    params : _TapholeParams
+        Parameters of the tap-hole flow calculation.
+
+    Returns
+    -------
+    h0_l : float
+        The level, relative to the tap-hole centreline, below which only slag
+        enters the tap-hole, m.
+    h0_h : float
+        The level, relative to the tap-hole centreline, above which only metal
+        enters the tap-hole, m.
+
+    """
+    p = params
+    rt = 0.5 * p.tapholediameter
+    pcorr = p.bedporosity ** 2
+    h0_l = (-rt - p.densityslag * uslag * uslag
+            / (8 * g * pcorr * (p.densitymetal - p.densityslag)))
+    h0_h = (rt + p.densitymetal * umetal * umetal
+            / (8 * g * pcorr * (p.densitymetal - p.densityslag)))
+    return h0_l, h0_h
+
+
+def _segment_area(rt, h):
+    """Calculate the area of a circular segment of the tap-hole.
+
+    Parameters
+    ----------
+    rt : float
+        Radius of the tap-hole, m.
+    h : float
+        The height of the chord relative to the centre, m, between -rt and rt.
+        The segment is the part of the circle below the chord.
+
+    Returns
+    -------
+    float
+        The area of the segment, m2.
+
+    """
+    theta = 2 * math.acos(-h / rt)
+    return 0.5 * rt * rt * (theta - math.sin(theta))
+
+
+def _phase_areas(hm, hs, h0_l, h0_h, rt):
+    """Calculate the areas of the tap-hole cross-section occupied by each
+    phase.
+
+    Parameters
+    ----------
+    hm : float
+        Metal level relative to the tap-hole centreline, m.
+    hs : float
+        Slag level relative to the tap-hole centreline, m.
+    h0_l : float
+        The level below which only slag enters the tap-hole, m.
+    h0_h : float
+        The level above which only metal enters the tap-hole, m.
+    rt : float
+        Radius of the tap-hole, m.
+
+    Returns
+    -------
+    area_m : float
+        Area of the tap-hole occupied by metal, m2.
+    area_s : float
+        Area of the tap-hole occupied by slag, m2.
+
+    """
+    if hs < -rt:
+        # slag below taphole - no flow
+        return 0, 0
+    if hs < rt:
+        # taphole partially filled
+        if hm < h0_l:
+            # slag only
+            return 0, _segment_area(rt, hs)
+        # slag and metal
+        hi = hs - (hs - hm) * (hs + rt) / (hs - h0_l)
+        area_m = _segment_area(rt, hi)
+        return area_m, _segment_area(rt, hs) - area_m
+    # taphole completely filled
+    if hm < h0_l:
+        # slag only
+        return 0, pi * rt * rt
+    if hm > h0_h:
+        # metal only
+        return pi * rt * rt, 0
+    # slag and metal
+    hi = rt * (1 - 2 * (h0_h - hm) / (h0_h - h0_l))
+    area_m = _segment_area(rt, hi)
+    return area_m, pi * rt * rt - area_m
+
+
+def _calc_vdot_out(hmetal, hslag, umetal0, uslag0, params):
+    """Calculate volumetric outflow rates of metal and slag through the
+    tap-hole for the given furnace state.
+
+    Solves for phase velocities accounting for burden pressure drop, tap-hole
+    friction, and interface deformation effects. Returns zero flow when the
+    tap-hole is closed.
+
+    Parameters
+    ----------
+    hmetal : float
+        Current metal bath level above hearth, m.
+    hslag : float
+        Current slag bath level above hearth, m.
+    umetal0 : float
+        Initial guess for metal velocity in tap-hole, m/s.
+    uslag0 : float
+        Initial guess for slag velocity in tap-hole, m/s.
+    params : _TapholeParams
+        Parameters of the tap-hole flow calculation.
+
+    Returns
+    -------
+    umetal : float
+        Velocity of metal through the tap-hole, m/s.
+    uslag : float
+        Velocity of slag through the tap-hole, m/s.
+    vdotmetal_out : float
+        Volumetric outflow rate of metal, m3/s.
+    vdotslag_out : float
+        Volumetric outflow rate of slag, m3/s.
+
+    """
+    if not params.tapholeopen_yn:
+        return 0, 0, 0, 0
+    rt = 0.5 * params.tapholediameter
+    hs = hslag - params.tapholeheight
+    hm = hmetal - params.tapholeheight
+    pa = _tapping_pressure(hm, hs, rt, params.densitymetal, params.densityslag)
+    umetal, uslag = _solve_velocities(pa, umetal0, uslag0, params)
+    h0_l, h0_h = _interface_levels(umetal, uslag, params)
+    area_m, area_s = _phase_areas(hm, hs, h0_l, h0_h, rt)
+    if not params.allownegativeheights_yn:
+        if hslag <= 0:
+            uslag = 0
+        if hmetal <= 0:
+            umetal = 0
+    return umetal, uslag, area_m * umetal, area_s * uslag
+
+
 class SubmergedArcFurnace():
     """Submerged-arc furnace class. This version assumes a slag and metal
     smelting process, with a porous burden layer and a single tap-hole for
@@ -531,213 +807,59 @@ class SubmergedArcFurnace():
         self.vdotmetal_out = 0
         self.vdotslag_out = 0
 
-    def _calc_vdot_out(self, hmetal, hslag, umetal0, uslag0,
-                       tapholediameter, tapholelength, tapholeheight,
-                       tapholeroughness, entrykl, bedmindiameter,
-                       bedmaxdiameter, bedporosity, particlediameter,
-                       particlesphericity, densitymetal, densityslag,
-                       viscositymetal, viscosityslag, tapholeopen_yn,
-                       allownegativeheights_yn, bedmodel, fdmodel):
-        """Calculate volumetric outflow rates of metal and slag through the
-        tap-hole for the current furnace state.
+    def _calc_burden_coefficients(self, viscosity, density):
+        """Calculate the coefficients of the pressure drop through the burden
+        and the tap-hole entrance for one phase.
 
-        Iteratively solves for phase velocities accounting for burden pressure
-        drop, tap-hole friction, and interface deformation effects. Returns
-        zero flow when the tap-hole is closed.
+        The pressure drop is dP = A*u^2 + B*u, where u is the fluid velocity.
 
         Parameters
         ----------
-        hmetal : float
-            Current metal bath level above hearth, m.
-        hslag : float
-            Current slag bath level above hearth, m.
-        umetal0 : float
-            Initial guess for metal velocity in tap-hole, m/s.
-        uslag0 : float
-            Initial guess for slag velocity in tap-hole, m/s.
-        tapholediameter : float
-            Diameter of tap-hole channel, m.
-        tapholelength : float
-            Length of tap-hole channel, m.
-        tapholeheight : float
-            Position of tap-hole centreline relative to hearth level, m.
-        tapholeroughness : float
-            Roughness of the tap-hole channel surface.
-        entrykl : float
-            Pressure loss coefficient for tap-hole entrance effects.
-        bedmindiameter : float
-            Diameter of cavity in burden in front of tap-hole, m.
-        bedmaxdiameter : float
-            Extent of burden from tap-hole, m.
-        bedporosity : float
-            Porosity of the burden layer.
-        particlediameter : float
-            Diameter of burden particles, m.
-        particlesphericity : float
-            Sphericity of burden particles.
-        densitymetal : float
-            Density of the molten metal phase, kg/m3.
-        densityslag : float
-            Density of the molten slag phase, kg/m3.
-        viscositymetal : float
-            Viscosity of the molten metal phase, Pa.s.
-        viscosityslag : float
-            Viscosity of the molten slag phase, Pa.s.
-        tapholeopen_yn : bool
-            True if the tap-hole is open, False if closed.
-        allownegativeheights_yn : bool
-            Whether to allow phase heights to go below hearth level.
-        bedmodel : callable
-            Function to model pressure drop through the burden.
-        fdmodel : callable
-            Function to model friction factor in the tap-hole channel.
+        viscosity : float
+            Viscosity of the phase, Pa.s.
+        density : float
+            Density of the phase, kg/m3.
 
         Returns
         -------
-        umetal : float
-            Velocity of metal through the tap-hole, m/s.
-        uslag : float
-            Velocity of slag through the tap-hole, m/s.
-        vdotmetal_out : float
-            Volumetric outflow rate of metal, m3/s.
-        vdotslag_out : float
-            Volumetric outflow rate of slag, m3/s.
+        a : float
+            The coefficient of the quadratic term, including the entrance loss.
+        b : float
+            The coefficient of the linear term.
 
         """
-        umetal, uslag, vdotmetal_out, vdotslag_out = 0, 0, 0, 0
-        if tapholeopen_yn:
-            rt = 0.5 * tapholediameter
-            a_m = 0.5 * (1 + entrykl) * densitymetal
-            a_s = 0.5 * (1 + entrykl) * densityslag
-            b_m, b_s = 0, 0
-
-            # Bed pressure drop coefficient calculation
-            ab, bb = bedmodel(tapholediameter, bedmindiameter, bedmaxdiameter,
-                              particlediameter, particlesphericity, bedporosity,
-                              viscositymetal, densitymetal)
-            a_m += ab
-            b_m += bb
-            ab, bb = bedmodel(tapholediameter, bedmindiameter, bedmaxdiameter,
-                              particlediameter, particlesphericity, bedporosity,
-                              viscosityslag, densityslag)
-            a_s += ab
-            b_s += bb
-
-            # Tapping pressure calculation (applied to both phases, based on
-            # undeformed interfaces). Integrated pressure field in z, averaged
-            # with total height in taphole.
-            hs = hslag - tapholeheight
-            hm = hmetal - tapholeheight
-            if hs < -rt:
-                # liquid level below taphole - no flow
-                pa = 0
-            elif hs < rt:
-                # liquid level between taphole limits
-                if hm < -rt:
-                    # slag only
-                    pa = 0.5 * g * (hs + rt) * densityslag
-                else:
-                    # slag and metal
-                    pa = 0.5 * g * ((densitymetal * (hm + rt) * (hm + rt)
-                                    + densityslag * (hs * (hs + 2 * rt)
-                                                     - hm * (hm + 2 * rt))) / (hs + rt))
-            else:
-                # liquid level above taphole
-                if hm < -rt:
-                    # slag only
-                    pa = hs * densityslag * g
-                elif hm < rt:
-                    # slag and metal
-                    pa = 0.25 * g * ((densitymetal * (hm + rt) * (hm + rt)
-                                     + densityslag * (rt * (4 * hs - rt)
-                                                      - hm * (hm + 2 * rt))) / rt)
-                else:
-                    # metal only
-                    pa = g * (densityslag * (hs - hm) + densitymetal * hm)
-
-            # calculate phase velocities
-            converged, umetal, uslag = math.inf, umetal0, uslag0
-            while converged > 1e-6:
-                fdm = fdmodel(umetal, densitymetal, viscositymetal,
-                              tapholediameter, tapholeroughness)
-                fds = fdmodel(uslag, densityslag, viscosityslag,
-                              tapholediameter, tapholeroughness)
-                a_mc = a_m + (0.5 * densitymetal * fdm
-                              * tapholelength / tapholediameter)
-                a_sc = a_s + (0.5 * densityslag * fds
-                              * tapholelength / tapholediameter)
-                nvm = (-b_m + math.sqrt(b_m * b_m + 4 * pa * a_mc)) / (2 * a_mc)
-                nvs = (-b_s + math.sqrt(b_s * b_s + 4 * pa * a_sc)) / (2 * a_sc)
-                converged = abs(nvm - umetal) + abs(nvs - uslag)
-                umetal, uslag = nvm, nvs
-
-            # interface deformations
-            pcorr = bedporosity ** 2
-            h0_l = (-rt - densityslag * uslag * uslag
-                    / (8 * g * pcorr * (densitymetal - densityslag)))
-            h0_h = (rt + densitymetal * umetal * umetal
-                    / (8 * g * pcorr * (densitymetal - densityslag)))
-
-            if hs < -rt:
-                # slag below taphole - no flow
-                area_m = 0
-                area_s = 0
-            elif hs < rt:
-                # taphole partially filled
-                if hm < h0_l:
-                    # slag only
-                    theta = 2 * math.acos(-hs / rt)
-                    area_m = 0
-                    area_s = 0.5 * rt * rt * (theta - math.sin(theta))
-                else:
-                    # slag and metal
-                    hi = hs - (hs - hm) * (hs + rt) / (hs - h0_l)
-                    theta = 2 * math.acos(-hi / rt)
-                    area_m = 0.5 * rt * rt * (theta - math.sin(theta))
-                    theta = 2 * math.acos(-hs / rt)
-                    area_s = 0.5 * rt * rt * (theta - math.sin(theta)) - area_m
-            else:
-                # taphole completely filled
-                if hm < h0_l:
-                    # slag only
-                    area_m = 0
-                    area_s = pi * rt * rt
-                elif hm > h0_h:
-                    # metal only
-                    area_m = pi * rt * rt
-                    area_s = 0
-                else:
-                    # slag and metal
-                    hi = rt * (1 - 2 * (h0_h - hm) / (h0_h - h0_l))
-                    theta = 2 * math.acos(-hi / rt)
-                    area_m = 0.5 * rt * rt * (theta - math.sin(theta))
-                    area_s = pi * rt * rt - area_m
-            if not allownegativeheights_yn:
-                if hslag <= 0:
-                    uslag = 0
-                if hmetal <= 0:
-                    umetal = 0
-            vdotmetal_out = area_m * umetal
-            vdotslag_out = area_s * uslag
-
-        return umetal, uslag, vdotmetal_out, vdotslag_out
+        ab, bb = self.bedmodel(
+            self.tapholediameter, self.bedmindiameter, self.bedmaxdiameter,
+            self.particlediameter, self.particlesphericity, self.bedporosity,
+            viscosity, density)
+        return 0.5 * (1 + self.entrykl) * density + ab, 0 + bb
 
     def _calc_params(self):
         """Collect the parameters of the tap-hole flow calculation.
 
+        The parameters are a snapshot of the current attributes, so they can be
+        changed between time steps. The burden coefficients do not depend on
+        the furnace state, so they are calculated once for a time step instead
+        of for each evaluation of the flow.
+
         Returns
         -------
-        tuple
-            The parameters of _calc_vdot_out following the phase levels and
-            the initial guesses of the velocities.
+        _TapholeParams
+            The parameters of _calc_vdot_out.
 
         """
-        return (self.tapholediameter, self.tapholelength, self.tapholeheight,
-                self.tapholeroughness, self.entrykl, self.bedmindiameter,
-                self.bedmaxdiameter, self.bedporosity, self.particlediameter,
-                self.particlesphericity, self.densitymetal, self.densityslag,
-                self.viscositymetal, self.viscosityslag, self.tapholeopen_yn,
-                self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
+        a_m = b_m = a_s = b_s = 0
+        if self.tapholeopen_yn:
+            a_m, b_m = self._calc_burden_coefficients(self.viscositymetal,
+                                                      self.densitymetal)
+            a_s, b_s = self._calc_burden_coefficients(self.viscosityslag,
+                                                      self.densityslag)
+        return _TapholeParams(
+            self.tapholediameter, self.tapholelength, self.tapholeheight,
+            self.tapholeroughness, self.bedporosity, self.densitymetal,
+            self.densityslag, self.viscositymetal, self.viscosityslag,
+            self.fdmodel, self.tapholeopen_yn, self.allownegativeheights_yn,
+            a_m, b_m, a_s, b_s)
 
     def _calc_rates(self):
         """Calculate the coefficients linking the flows to the rates of change
@@ -779,7 +901,7 @@ class SubmergedArcFurnace():
             The metal level and the slag level at the start of the step, m.
         rates : tuple of numpy.ndarray
             The inflows and flows-to-rates matrix from _calc_rates.
-        params : tuple
+        params : _TapholeParams
             The parameters from _calc_params.
         velocities : list of float
             The metal and slag velocities in the tap-hole, m/s, used as initial
@@ -800,8 +922,8 @@ class SubmergedArcFurnace():
         start_velocities = []
 
         def flows(levels):
-            umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
-                levels[0], levels[1], velocities[0], velocities[1], *params)
+            umetal, uslag, vdotmetal_out, vdotslag_out = _calc_vdot_out(
+                levels[0], levels[1], velocities[0], velocities[1], params)
             velocities[0], velocities[1] = umetal, uslag
             if not start_velocities:
                 start_velocities.extend((umetal, uslag))
