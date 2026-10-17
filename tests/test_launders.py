@@ -3,6 +3,7 @@
 import numpy
 import pytest
 from scipy.constants import g
+from tappingsim.ladles import overflowmodel_exp
 from tappingsim.launders import SimpleSisoLaunder, SkimmerLaunder
 
 
@@ -392,3 +393,112 @@ class TestSkimmerLaunderTimeIntegration:
         errors = [numpy.abs(state_after(dt) - reference).max() for dt in (2.0, 1.0, 0.5)]
         assert errors[0] / errors[1] == pytest.approx(2, abs=0.5)
         assert errors[1] / errors[2] == pytest.approx(2, abs=0.5)
+
+
+def constant_fraction_model(dh, fraction):
+    """Entrainment model with a constant metal fraction, for testing."""
+    return fraction
+
+
+class TestSkimmerLaunderEntrainment:
+    k = 2 / 3 * numpy.sqrt(g)
+
+    def test_default_is_no_entrainment(self, skimmer):
+        set_levels(skimmer, 0.2, 0.6, 0.1, 0.55)
+        skimmer._calc_vdot_out(1.0)
+        assert skimmer.slag_trough_vdotmetal_out == 0
+        assert skimmer.metal_trough_vdotmetal_out == 0
+
+    def test_overflow_models_are_callable_functions_of_distance(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=overflowmodel_exp, slag_trough_overflowconsts=[0.2, 2.0],
+            metal_trough_overflowmodel=constant_fraction_model,
+            metal_trough_overflowconsts=[0.3],
+        )
+        assert launder.slag_trough_overflowmodel(0.5) == pytest.approx(0.2 * numpy.exp(-1.0))
+        assert launder.metal_trough_overflowmodel(0.5) == 0.3
+
+    def test_entrained_metal_in_slag_trough_slag_only_overflow(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=overflowmodel_exp, slag_trough_overflowconsts=[0.2, 2.0]
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        launder._calc_vdot_out(1.0)
+        vfrac = 0.2 * numpy.exp(-2.0 * (0.5 - 0.2))
+        qslag = self.k * 0.6 * 0.5 * 0.1**1.5
+        assert launder.slag_trough_vdotmetal_out == pytest.approx(vfrac * qslag)
+        assert launder.slag_trough_vdotslag_out == pytest.approx((1 - vfrac) * qslag)
+
+    def test_entrained_metal_in_metal_trough_slag_only_overflow(self):
+        launder = make_skimmer(
+            metal_trough_overflowmodel=overflowmodel_exp, metal_trough_overflowconsts=[0.4, 3.0]
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        launder._calc_vdot_out(1.0)
+        vfrac = 0.4 * numpy.exp(-3.0 * (0.4 - 0.1))
+        qslag = self.k * 0.65 * 0.5 * 0.15**1.5
+        assert launder.metal_trough_vdotmetal_out == pytest.approx(vfrac * qslag)
+        assert launder.metal_trough_vdotslag_out == pytest.approx((1 - vfrac) * qslag)
+
+    def test_each_trough_uses_its_own_model(self):
+        """Entrainment is only active at the outlet whose model is configured."""
+        launder = make_skimmer(
+            metal_trough_overflowmodel=constant_fraction_model,
+            metal_trough_overflowconsts=[0.25],
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        launder._calc_vdot_out(1.0)
+        assert launder.slag_trough_vdotmetal_out == 0
+        qslag = self.k * 0.65 * 0.5 * 0.15**1.5
+        assert launder.metal_trough_vdotmetal_out == pytest.approx(0.25 * qslag)
+        assert launder.metal_trough_vdotslag_out == pytest.approx(0.75 * qslag)
+
+    def test_entrained_metal_adds_to_metal_overflow(self):
+        plain, entraining = make_skimmer(), make_skimmer(
+            slag_trough_overflowmodel=constant_fraction_model, slag_trough_overflowconsts=[0.1]
+        )
+        for launder in (plain, entraining):
+            set_levels(launder, 0.55, 0.7, 0.3, 0.45)
+            launder._calc_vdot_out(1.0)
+        qslag = self.k * 0.6 * 0.5 * 0.15**1.5
+        assert entraining.slag_trough_vdotmetal_out == pytest.approx(
+            plain.slag_trough_vdotmetal_out + 0.1 * qslag
+        )
+        assert entraining.slag_trough_vdotslag_out == pytest.approx(0.9 * qslag)
+
+    def test_no_entrainment_without_metal(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=constant_fraction_model, slag_trough_overflowconsts=[0.3]
+        )
+        set_levels(launder, 0.0, 0.6, 0.0, 0.0)
+        launder._calc_vdot_out(1.0)
+        assert launder.slag_trough_vdotmetal_out == 0
+        assert launder.slag_trough_vdotslag_out > 0
+
+    def test_mass_balance_with_entrainment_over_long_step(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=overflowmodel_exp, slag_trough_overflowconsts=[0.2, 2.0],
+            metal_trough_overflowmodel=overflowmodel_exp, metal_trough_overflowconsts=[0.3, 1.0],
+        )
+        set_levels(launder, 0.4, 0.7, 0.3, 0.45)
+        dt = 60.0
+        vmetal0, vslag0 = total_volumes(launder)
+        launder.calc_dt(dt, 0.03, 0.05)
+        vmetal1, vslag1 = total_volumes(launder)
+        metal_out = launder.slag_trough_vdotmetal_out + launder.metal_trough_vdotmetal_out
+        slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
+        assert launder.slag_trough_vdotslag_out > 0 and launder.metal_trough_vdotslag_out > 0
+        assert vmetal1 - vmetal0 == pytest.approx((0.03 - metal_out) * dt)
+        assert vslag1 - vslag0 == pytest.approx((0.05 - slag_out) * dt)
+
+    def test_steady_state_with_entrainment_outflow_matches_inflow(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=overflowmodel_exp, slag_trough_overflowconsts=[0.2, 2.0],
+            metal_trough_overflowmodel=overflowmodel_exp, metal_trough_overflowconsts=[0.3, 1.0],
+        )
+        for _ in range(3000):
+            launder.calc_dt(1.0, 0.01, 0.02)
+        metal_out = launder.slag_trough_vdotmetal_out + launder.metal_trough_vdotmetal_out
+        slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
+        assert metal_out == pytest.approx(0.01, rel=1e-3)
+        assert slag_out == pytest.approx(0.02, rel=1e-3)

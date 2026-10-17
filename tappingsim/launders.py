@@ -11,6 +11,8 @@ import math
 import numpy
 from scipy.constants import g
 
+from tappingsim.ladles import OUTLET_PREMULT, overflow_flowrates, overflowmodel_step
+
 
 def _sqrt(x):
     """Scalar square root, returning nan for negative input as numpy.sqrt does, but
@@ -117,6 +119,16 @@ class SkimmerLaunder:
     max_substep : float, optional
         The longest internal time step used by calc_dt, in s. Longer time steps are divided
         into equal sub-steps no longer than this. The default is 1 s.
+    slag_trough_overflowmodel : function, optional
+        Function to be used to model the entrainment of metal in the slag flowing out of the
+        slag trough outlet, as for the ladle classes. The default is no entrainment.
+    slag_trough_overflowconsts : list of float, optional
+        Empirical parameters for the slag trough overflow model.
+    metal_trough_overflowmodel : function, optional
+        Function to be used to model the entrainment of metal in the slag flowing out of the
+        metal trough outlet, as for the ladle classes. The default is no entrainment.
+    metal_trough_overflowconsts : list of float, optional
+        Empirical parameters for the metal trough overflow model.
 
     Attributes
     ----------
@@ -162,6 +174,12 @@ class SkimmerLaunder:
         The density of the slag phase, kg/m3.
     max_substep : float
         The longest internal time step used by calc_dt, in s.
+    slag_trough_overflowmodel : function
+        Reference to internal lambda function created for overflow modelling at the slag
+        trough outlet.
+    metal_trough_overflowmodel : function
+        Reference to internal lambda function created for overflow modelling at the metal
+        trough outlet.
     slag_trough_hmetal : float
         The current level of metal in the slag trough, m.
     slag_trough_hslag : float
@@ -190,8 +208,9 @@ class SkimmerLaunder:
     trough through the underflow channel under the weir, driven by the difference in
     hydrostatic pressure between the two troughs. Each trough drains through its own
     open-channel overflow outlet, which is modelled as a broad-crested weir with flowrate
-    proportional to the overflow head to the power 3/2. Metal entrainment in the overflow
-    streams is not yet modelled, so the slag outflows are currently free of metal.
+    proportional to the overflow head to the power 3/2. Metal entrained in the slag flowing
+    out of each outlet is described by an overflow model, as for the ladle classes. With the
+    default step model there is no entrainment, and the slag outflows are free of metal.
 
     The state is integrated in time with a linearly-implicit (Rosenbrock-Euler) scheme, which
     remains stable for time steps far beyond the limit of explicit schemes. That limit is
@@ -248,6 +267,11 @@ class SkimmerLaunder:
         density_slag,
         # numerics
         max_substep=1.0,
+        # entrainment of metal in the slag overflow from each trough
+        slag_trough_overflowmodel=overflowmodel_step,
+        slag_trough_overflowconsts=(),
+        metal_trough_overflowmodel=overflowmodel_step,
+        metal_trough_overflowconsts=(),
     ):
         if max_substep <= 0:
             raise ValueError("max_substep must be positive")
@@ -280,7 +304,13 @@ class SkimmerLaunder:
         self.slag_trough_hmetal = 0
         self.slag_trough_hslag = 0
         self.max_substep = max_substep
-        self.outlet_premult = 2 / 3 * numpy.sqrt(g)
+        self.slag_trough_overflowmodel = lambda dh: slag_trough_overflowmodel(
+            dh, *slag_trough_overflowconsts
+        )
+        self.metal_trough_overflowmodel = lambda dh: metal_trough_overflowmodel(
+            dh, *metal_trough_overflowconsts
+        )
+        self.outlet_premult = OUTLET_PREMULT
 
     def _levels_to_volumes(self, hm_ss, hs_ss, hm_ms, hs_ms):
         """Convert phase levels in the two troughs to phase volumes.
@@ -382,108 +412,49 @@ class SkimmerLaunder:
 
         Overflow from a trough occurs when the top of the slag layer exceeds the outlet
         crest height. Each phase flows over the outlet as over a broad-crested weir, with
-        flowrate proportional to Cd*width*head**1.5. If the metal level is also above the
-        crest, the slag layer head is the slag layer thickness, and the metal head is
-        expressed as an equivalent metal head by scaling the slag layer thickness by the
-        density ratio of slag to metal.
-        TODO: Metal entrainment in the slag outflow is currently set to zero, pending
-        implementation of overflow models as used in the ladle classes.
+        flowrate proportional to Cd*width*head**1.5, as described in
+        tappingsim.ladles.overflow_flowrates. Metal entrainment in the slag outflow is
+        calculated using the configured overflow model of each trough.
 
         Parameters
         ----------
         dt : float
-            Length of time step, in s.
+            Length of time step, in s. Not used.
 
         Returns
         -------
         None.
 
         """
+        density_ratio = self.density_slag / self.density_metal
         # slag section
-        if self.slag_trough_hslag < self.slag_trough_outlet_height:
-            # slag and metal are both below outlet
-            self.slag_trough_vdotmetal_out = 0
-            self.slag_trough_vdotslag_out = 0
-        else:
-            # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
-            #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
-            #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
-            vfrac = 0
-            if self.slag_trough_hmetal < self.slag_trough_outlet_height:
-                # slag is above outlet, metal is below outlet
-                # TODO need to correct slag phase density if entrained metal is present?
-                h1 = self.slag_trough_hslag - self.slag_trough_outlet_height
-                qslag = (
-                    self.outlet_premult
-                    * self.slag_trough_outlet_slag_Cd
-                    * self.slag_trough_outlet_width
-                    * h1**1.5
-                )
-                self.slag_trough_vdotmetal_out = vfrac * qslag
-                self.slag_trough_vdotslag_out = (1 - vfrac) * qslag
-            else:
-                # slag and metal are both above outlet
-                # TODO need to correct slag phase density if entrained metal is present?
-                h1 = self.slag_trough_hslag - self.slag_trough_hmetal
-                h2 = self.slag_trough_hmetal - self.slag_trough_outlet_height
-                rho_ratio = self.density_slag / self.density_metal
-                qslag = (
-                    self.outlet_premult
-                    * self.slag_trough_outlet_slag_Cd
-                    * self.slag_trough_outlet_width
-                    * h1**1.5
-                )
-                qmetal = (
-                    self.outlet_premult
-                    * self.slag_trough_outlet_metal_Cd
-                    * self.slag_trough_outlet_width
-                    * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
-                )
-                self.slag_trough_vdotmetal_out = qmetal + vfrac * qslag
-                self.slag_trough_vdotslag_out = (1 - vfrac) * qslag
-
+        (
+            self.slag_trough_vdotmetal_out,
+            self.slag_trough_vdotslag_out,
+        ) = overflow_flowrates(
+            self.slag_trough_hmetal,
+            self.slag_trough_hslag,
+            self.slag_trough_outlet_height,
+            self.slag_trough_outlet_width,
+            self.slag_trough_outlet_slag_Cd,
+            self.slag_trough_outlet_metal_Cd,
+            density_ratio,
+            self.slag_trough_overflowmodel,
+        )
         # metal section
-        if self.metal_trough_hslag < self.metal_trough_outlet_height:
-            # slag and metal are both below outlet
-            self.metal_trough_vdotmetal_out = 0
-            self.metal_trough_vdotslag_out = 0
-        else:
-            # TODO: Implement overflow entrainment models similar to ladle models - the hardcoded
-            #       vfrac = 0 here is a placehonder, a simple zero-entrainment model.
-            #       Replace with e.g. vfrac = self.overflowmodel(h_overflow - h_metal)
-            vfrac = 0
-            if self.metal_trough_hmetal < self.metal_trough_outlet_height:
-                # slag is above outlet, metal is below outlet
-                # TODO need to correct slag phase density if entrained metal is present?
-                h1 = self.metal_trough_hslag - self.metal_trough_outlet_height
-                qslag = (
-                    self.outlet_premult
-                    * self.metal_trough_outlet_slag_Cd
-                    * self.metal_trough_outlet_width
-                    * h1**1.5
-                )
-                self.metal_trough_vdotmetal_out = vfrac * qslag
-                self.metal_trough_vdotslag_out = (1 - vfrac) * qslag
-            else:
-                # slag and metal are both above outlet
-                # TODO need to correct slag phase density if entrained metal is present?
-                h1 = self.metal_trough_hslag - self.metal_trough_hmetal
-                h2 = self.metal_trough_hmetal - self.metal_trough_outlet_height
-                rho_ratio = self.density_slag / self.density_metal
-                qslag = (
-                    self.outlet_premult
-                    * self.metal_trough_outlet_slag_Cd
-                    * self.metal_trough_outlet_width
-                    * h1**1.5
-                )
-                qmetal = (
-                    self.outlet_premult
-                    * self.metal_trough_outlet_metal_Cd
-                    * self.metal_trough_outlet_width
-                    * ((rho_ratio * h1 + h2) ** 1.5 - (rho_ratio * h1) ** 1.5)
-                )
-                self.metal_trough_vdotmetal_out = qmetal + vfrac * qslag
-                self.metal_trough_vdotslag_out = (1 - vfrac) * qslag
+        (
+            self.metal_trough_vdotmetal_out,
+            self.metal_trough_vdotslag_out,
+        ) = overflow_flowrates(
+            self.metal_trough_hmetal,
+            self.metal_trough_hslag,
+            self.metal_trough_outlet_height,
+            self.metal_trough_outlet_width,
+            self.metal_trough_outlet_slag_Cd,
+            self.metal_trough_outlet_metal_Cd,
+            density_ratio,
+            self.metal_trough_overflowmodel,
+        )
 
     def _calc_vdot_weir(self):
         """Calculate the volumetric flowrates of metal and slag through the weir underflow
