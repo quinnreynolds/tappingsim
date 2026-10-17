@@ -3,7 +3,7 @@
 import numpy
 import pytest
 from tappingsim import integrators
-from tappingsim.integrators import integrate, linearly_implicit_step
+from tappingsim.integrators import integrate, linearly_implicit_step, rk4_step
 
 # One volume drained by one flow
 F1 = numpy.array([[-1.0]])
@@ -170,3 +170,65 @@ class TestIntegrateUnphysicalSteps:
         with pytest.raises(RuntimeError):
             integrate(linear_outflow(0.3), [1.0], [0.1], F1, 1.0)
         assert len(steps) <= 100
+
+
+class TestRk4Step:
+    def test_effective_flows_close_the_balance(self):
+        volumes, inflows, dt = numpy.array([1.0, 0.5]), numpy.array([0.1, 0.0]), 0.7
+        new_volumes, q = rk4_step(series_flows, volumes, inflows, F2, dt)
+        assert new_volumes - volumes == pytest.approx(dt * (inflows + F2 @ q), abs=1e-14)
+
+    def test_exact_for_a_constant_rate(self):
+        """With no dependence on the state the step is an exact linear update."""
+        V, q = rk4_step(lambda x: numpy.array([0.2]), [1.0], [0.5], F1, 10.0)
+        assert V[0] == pytest.approx(1.0 + 10.0 * (0.5 - 0.2))
+        assert q[0] == pytest.approx(0.2)
+
+    def test_fourth_order_in_time(self):
+        """Halving the step reduces the error against the exact exponential decay by a
+        factor of about 16."""
+        def error(n):
+            x = numpy.array([1.0])
+            for _ in range(n):
+                x, _ = rk4_step(linear_outflow(1.0), x, [0.0], F1, 1.0 / n)
+            return abs(x[0] - numpy.exp(-1.0))
+
+        assert error(8) / error(16) == pytest.approx(16, rel=0.1)
+        assert error(16) / error(32) == pytest.approx(16, rel=0.05)
+
+    def test_far_more_accurate_than_the_implicit_step(self):
+        x_rk, x_im = numpy.array([1.0]), numpy.array([1.0])
+        for _ in range(10):
+            x_rk, _ = rk4_step(linear_outflow(1.0), x_rk, [0.0], F1, 0.1)
+            x_im, _ = linearly_implicit_step(linear_outflow(1.0), x_im, [0.0], F1, 0.1)
+        assert abs(x_rk[0] - numpy.exp(-1.0)) < 1e-3 * abs(x_im[0] - numpy.exp(-1.0))
+
+    def test_unstable_for_steps_beyond_its_stability_limit(self):
+        """Explicit schemes have a stability limit: for dx/dt = -k*x, k*dt must be below
+        about 2.78. This is why rk4_step is for non-stiff flows only."""
+        x = numpy.array([1.0])
+        for _ in range(20):
+            x, _ = rk4_step(linear_outflow(1.0), x, [0.0], F1, 4.0)
+        assert abs(x[0]) > 1e3
+
+    def test_stages_evaluate_the_flows_four_times(self):
+        calls = []
+
+        def counting(x):
+            calls.append(x.copy())
+            return numpy.array([0.2 * x[0]])
+
+        rk4_step(counting, [1.0], [0.0], F1, 1.0)
+        assert len(calls) == 4
+        assert calls[0].tolist() == [1.0]
+
+    def test_inputs_are_not_modified(self):
+        volumes, inflows = numpy.array([1.0, 0.5]), numpy.array([0.1, 0.0])
+        rk4_step(series_flows, volumes, inflows, F2, 0.7)
+        assert volumes.tolist() == [1.0, 0.5]
+        assert inflows.tolist() == [0.1, 0.0]
+
+    def test_zero_step_leaves_the_state_unchanged(self):
+        V, q = rk4_step(linear_outflow(0.5), [2.0], [0.1], F1, 0.0)
+        assert V[0] == 2.0
+        assert q[0] == pytest.approx(1.0)

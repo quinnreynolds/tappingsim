@@ -1,21 +1,20 @@
-"""Functions for the time integration of the phase volumes in tapping units.
+"""Functions for the time integration of the state of tapping units.
 
-Ladles and launder troughs accumulate metal and slag, and lose them over
-overflow outlets and through internal flow paths such as weir underflow
-channels. Their state is a vector of phase volumes V, which obeys the mass
-balance::
+The state x of a unit, such as the phase volumes in a ladle or launder trough
+or the bath levels in a furnace, obeys the balance::
 
-    dV/dt = inflows + F q(V)
+    dx/dt = inflows + F q(x)
 
-where q(V) are the flowrates, which depend on the volumes, and F is a constant
-matrix of mass balance coefficients linking the flows to the rates of change of
-the volumes.
+where q(x) are the flowrates, which depend on the state, and F is a constant
+matrix of coefficients linking the flows to the rates of change of the state.
 
 The flows over overflow outlets and through underflow channels are strongly
 nonlinear, with a stiffness which can be very large, so explicit integration
-is only stable for small time steps. The functions here use a linearly-implicit
-(Rosenbrock-Euler) scheme, which has no stability limit for the linearised
-problem.
+is only stable for small time steps. For these the functions here provide a
+linearly-implicit (Rosenbrock-Euler) scheme, which has no stability limit for
+the linearised problem. For smooth flows with slow dynamics, such as the
+drainage of a furnace through its tap-hole, they provide an explicit
+fourth-order Runge-Kutta scheme.
 
 """
 
@@ -167,3 +166,51 @@ def integrate(flows, volumes, inflows, flows_to_rates, dt, max_substep=1.0,
                               dt / n_substeps, halvings, positive, eps)
         total_flows = total_flows + q
     return volumes, total_flows / n_substeps
+
+
+def rk4_step(flows, state, inflows, flows_to_rates, dt):
+    """Advance the state over a single explicit fourth-order Runge-Kutta step.
+
+    This is the classical Runge-Kutta scheme for dx/dt = inflows + F*q(x),
+    where F is the matrix of mass balance coefficients. It is fourth order in
+    time, but only stable for time steps that are short relative to the
+    fastest time scale of the flows, so it should not be used for stiff flows
+    (see linearly_implicit_step for those).
+
+    Parameters
+    ----------
+    flows : function
+        Function of the state, as a numpy array, returning the flowrates as a
+        numpy array, m3/s.
+    state : array_like of float
+        The state at the start of the step.
+    inflows : array_like of float
+        The constant rate of addition to each component of the state over the
+        step.
+    flows_to_rates : array_like of float
+        The matrix of mass balance coefficients, with a row for each component
+        of the state and a column for each flow.
+    dt : float
+        Length of time step, in s.
+
+    Returns
+    -------
+    state : numpy.ndarray
+        The state at the end of the step.
+    flows : numpy.ndarray
+        The effective flowrates over the step, m3/s, which are the weighted
+        average of the flowrates at the four stages of the step, so that the
+        change in the state is dt*(inflows + F*flows).
+
+    """
+    state = numpy.asarray(state, dtype=float)
+    q1 = flows(state)
+    k1 = flows_to_rates @ q1 + inflows
+    q2 = flows(state + 0.5 * dt * k1)
+    k2 = flows_to_rates @ q2 + inflows
+    q3 = flows(state + 0.5 * dt * k2)
+    k3 = flows_to_rates @ q3 + inflows
+    q4 = flows(state + dt * k3)
+    k4 = flows_to_rates @ q4 + inflows
+    return (state + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4),
+            (q1 + 2 * q2 + 2 * q3 + q4) / 6)
