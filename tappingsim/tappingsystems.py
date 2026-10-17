@@ -120,7 +120,10 @@ class SAFWithLadles():
     furnace : object
         An instance of the SubmergedArcFurnace class or equivalent.
     launder : object
-        An instance of the SimpleSiSoLaunder class or equivalent.
+        An instance of the SimpleSiSoLaunder class or equivalent. The launder
+        object must implement the vdotmetal_out and vdotslag_out attributes,
+        the metal and slag flowrates out of the launder into the first ladle,
+        as these are read by the calc_dt method.
     ladles: list of object
         A list of instances of the CylindricalLadle class or equivalent.
 
