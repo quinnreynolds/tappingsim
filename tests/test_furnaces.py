@@ -206,6 +206,10 @@ class TestSubmergedArcFurnaceClosedTaphole:
         assert furnace.hslag == pytest.approx(0.40195044001813807, rel=1e-8)
 
 
+# The reference values below were calculated for the furnace of the shared fixture with an
+# independent solution of the level equations (an adaptive 8th order Runge-Kutta method with a
+# tight tolerance on the tap-hole flow calculation), so these tests check accuracy.
+
 class TestSubmergedArcFurnaceOpenTaphole:
     @pytest.fixture(autouse=True)
     def advance_one_closed_step(self, furnace):
@@ -222,16 +226,17 @@ class TestSubmergedArcFurnaceOpenTaphole:
         assert furnace.vdotslag_out > 0
 
     def test_metal_outflow_value(self, furnace):
-        assert furnace.vdotmetal_out == pytest.approx(0.00957043121552626, rel=1e-6)
+        """The reported outflow is the mean over the time step."""
+        assert furnace.vdotmetal_out == pytest.approx(0.009347885817, rel=1e-6)
 
     def test_slag_outflow_value(self, furnace):
-        assert furnace.vdotslag_out == pytest.approx(0.0015383077470994438, rel=1e-6)
+        assert furnace.vdotslag_out == pytest.approx(0.001614724222, rel=1e-6)
 
     def test_metal_level_value(self, furnace):
-        assert furnace.hmetal == pytest.approx(0.23748715684043864, rel=1e-8)
+        assert furnace.hmetal == pytest.approx(0.237801994176, rel=1e-7)
 
     def test_slag_level_value(self, furnace):
-        assert furnace.hslag == pytest.approx(0.38818522921477017, rel=1e-8)
+        assert furnace.hslag == pytest.approx(0.388391959353, rel=1e-7)
 
 
 class TestSubmergedArcFurnaceCalcTimePeriod:
@@ -246,13 +251,112 @@ class TestSubmergedArcFurnaceCalcTimePeriod:
         self.metaltapped, self.slagtapped = furnace.calc_time_period(times=times)
 
     def test_metal_tapped_mass(self):
-        assert self.metaltapped == pytest.approx(24812.07235, rel=1e-5)
+        assert self.metaltapped == pytest.approx(24837.39172, rel=1e-6)
 
     def test_slag_tapped_mass(self):
-        assert self.slagtapped == pytest.approx(3294.08917, rel=1e-5)
+        assert self.slagtapped == pytest.approx(3288.00886, rel=1e-6)
 
     def test_metal_tapped_positive(self):
         assert self.metaltapped > 0
 
     def test_slag_tapped_positive(self):
         assert self.slagtapped > 0
+
+
+def balance_constants(furnace):
+    """Rate of change of the metal and slag levels due to smelting, and the factor linking
+    a net volume flowrate to the rate of change of a level."""
+    areaconst = 1 / (furnace.bedporosity * furnace.activeareafraction
+                     * 0.25 * numpy.pi * furnace.furnacediameter**2)
+    mdotmetal_in = furnace.powerMVA * furnace.powerfactor / (3.6 * furnace.metalSER)
+    vdotmetal_in = mdotmetal_in / furnace.densitymetal
+    vdotslag_in = mdotmetal_in * furnace.slagmetalmassratio / furnace.densityslag
+    return areaconst, vdotmetal_in, vdotslag_in
+
+
+def open_furnace(furnace_params, **overrides):
+    furnace = SubmergedArcFurnace(**dict(furnace_params, **overrides))
+    furnace.tapholeopen_yn = True
+    return furnace
+
+
+class TestSubmergedArcFurnaceTimeIntegration:
+    @pytest.mark.parametrize("dt", [1.0, 60.0, 300.0])
+    def test_levels_change_by_inflow_less_reported_outflow(self, furnace_params, dt):
+        """The reported outflows are step averages, so the level changes balance exactly."""
+        furnace = open_furnace(furnace_params)
+        areaconst, vdotmetal_in, vdotslag_in = balance_constants(furnace)
+        hmetal0, hslag0 = furnace.hmetal, furnace.hslag
+        furnace.calc_dt(dt)
+        assert furnace.vdotmetal_out > 0 and furnace.vdotslag_out > 0
+        dhmetal = dt * areaconst * (vdotmetal_in - furnace.vdotmetal_out)
+        dhslag = dhmetal + dt * areaconst * (vdotslag_in - furnace.vdotslag_out)
+        assert furnace.hmetal - hmetal0 == pytest.approx(dhmetal, abs=1e-12)
+        assert furnace.hslag - hslag0 == pytest.approx(dhslag, abs=1e-12)
+
+    def test_closed_taphole_is_an_exact_linear_update(self, furnace_params):
+        furnace = SubmergedArcFurnace(**furnace_params)
+        areaconst, vdotmetal_in, vdotslag_in = balance_constants(furnace)
+        furnace.calc_dt(600.0)
+        assert furnace.hmetal == pytest.approx(0.25 + 600 * areaconst * vdotmetal_in, rel=1e-12)
+        assert furnace.hslag == pytest.approx(
+            0.4 + 600 * areaconst * (vdotmetal_in + vdotslag_in), rel=1e-12)
+
+    def test_fourth_order_convergence(self, furnace_params):
+        """Halving the time step reduces the error in the levels by a large factor (the
+        flow calculation is converged only to a tolerance, which limits it at small steps)."""
+        def levels_after(dt, total=960.0):
+            furnace = open_furnace(furnace_params)
+            for _ in range(int(round(total / dt))):
+                furnace.calc_dt(dt)
+            return numpy.array([furnace.hmetal, furnace.hslag])
+
+        reference = levels_after(2.5)
+        errors = [numpy.abs(levels_after(dt) - reference).max() for dt in (240.0, 120.0, 60.0)]
+        assert errors[0] / errors[1] > 8
+        assert errors[1] / errors[2] > 8
+
+    def test_long_steps_remain_accurate_and_stable(self, furnace_params):
+        """A step of five minutes is within about a millimetre of a fine-step solution."""
+        coarse, fine = open_furnace(furnace_params), open_furnace(furnace_params)
+        coarse.calc_dt(300.0)
+        for _ in range(300):
+            fine.calc_dt(1.0)
+        assert coarse.hmetal == pytest.approx(fine.hmetal, abs=1e-3)
+        assert coarse.hslag == pytest.approx(fine.hslag, abs=1e-3)
+
+    def test_calc_time_period_matches_repeated_steps(self, furnace_params):
+        times = numpy.linspace(0, 600, 41)
+        a, b = open_furnace(furnace_params), open_furnace(furnace_params)
+        metal, slag = a.calc_time_period(times)
+        metal_sum = slag_sum = 0.0
+        for dt in numpy.diff(times):
+            b.calc_dt(float(dt))
+            metal_sum += dt * b.vdotmetal_out * b.densitymetal
+            slag_sum += dt * b.vdotslag_out * b.densityslag
+        assert metal == pytest.approx(metal_sum, rel=1e-6)
+        assert slag == pytest.approx(slag_sum, rel=1e-6)
+        assert a.hmetal == pytest.approx(b.hmetal, rel=1e-8)
+        assert a.hslag == pytest.approx(b.hslag, rel=1e-8)
+        assert a.vdotmetal_out == pytest.approx(b.vdotmetal_out, rel=1e-6)
+
+    def test_calc_time_period_tapped_mass_balances_the_levels(self, furnace_params):
+        """The mass tapped over a period equals the mass smelted less the change stored."""
+        furnace = open_furnace(furnace_params)
+        areaconst, vdotmetal_in, vdotslag_in = balance_constants(furnace)
+        hmetal0, times = furnace.hmetal, numpy.linspace(0, 600, 21)
+        metal, _ = furnace.calc_time_period(times)
+        stored = (furnace.hmetal - hmetal0) / areaconst * furnace.densitymetal
+        smelted = 600 * vdotmetal_in * furnace.densitymetal
+        assert metal == pytest.approx(smelted - stored, rel=1e-9)
+
+    def test_calc_time_period_with_a_single_time_does_nothing(self, furnace_params):
+        furnace = open_furnace(furnace_params)
+        assert furnace.calc_time_period(numpy.array([0.0])) == (0, 0)
+        assert (furnace.hmetal, furnace.hslag) == (0.25, 0.4)
+
+    def test_levels_are_plain_floats(self, furnace_params):
+        furnace = open_furnace(furnace_params)
+        furnace.calc_dt(60.0)
+        assert type(furnace.hmetal) is float and type(furnace.hslag) is float
+        assert type(furnace.vdotmetal_out) is float and type(furnace.vdotslag_out) is float

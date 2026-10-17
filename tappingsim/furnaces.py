@@ -10,7 +10,11 @@ packed beds and tap-hole channels.
 """
 
 import math
+
+import numpy
 from scipy.constants import g, pi
+
+from tappingsim.integrators import rk4_step
 
 
 def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
@@ -454,17 +458,31 @@ class SubmergedArcFurnace():
         Indicate whether furnace tap-hole is currently open (True) or
         closed (False).
     vdotmetal_out : float
-        The current outlet volume flowrate of metal from the unit, m3/s.
+        The outlet volume flowrate of metal from the unit, averaged over the
+        last time step, m3/s.
     vdotslag_out : float
-        The current outlet volume flowrate of slag from the unit, m3/s.
+        The outlet volume flowrate of slag from the unit, averaged over the
+        last time step, m3/s.
     umetal : float
-        The current velocity of metal through the tap-hole, m/s
+        The velocity of metal through the tap-hole at the start of the last
+        time step, m/s
     uslag : float
-        The current velocity of slag through the tap-hole, m/s
+        The velocity of slag through the tap-hole at the start of the last
+        time step, m/s
 
     Note
     ----
     This model is based on the formulation by Olsen & Reynolds. [Olsen2020]_
+
+    The metal and slag levels are integrated in time with the classical
+    fourth-order Runge-Kutta scheme (see tappingsim.integrators.rk4_step). The
+    drainage of the furnace is slow and smooth, so the scheme is stable for
+    time steps of many minutes, and its error in the levels and the tapped
+    masses is orders of magnitude lower than that of a first-order scheme with
+    the same step. The outlet flowrates reported after a time step are the
+    effective flowrates averaged over the step, so that the change in the
+    amounts of metal and slag in the furnace is exactly the amount added less
+    the amount tapped.
 
     References
     ----------
@@ -704,9 +722,102 @@ class SubmergedArcFurnace():
 
         return umetal, uslag, vdotmetal_out, vdotslag_out
 
+    def _calc_params(self):
+        """Collect the parameters of the tap-hole flow calculation.
+
+        Returns
+        -------
+        tuple
+            The parameters of _calc_vdot_out following the phase levels and
+            the initial guesses of the velocities.
+
+        """
+        return (self.tapholediameter, self.tapholelength, self.tapholeheight,
+                self.tapholeroughness, self.entrykl, self.bedmindiameter,
+                self.bedmaxdiameter, self.bedporosity, self.particlediameter,
+                self.particlesphericity, self.densitymetal, self.densityslag,
+                self.viscositymetal, self.viscosityslag, self.tapholeopen_yn,
+                self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
+
+    def _calc_rates(self):
+        """Calculate the coefficients linking the flows to the rates of change
+        of the metal and slag levels.
+
+        The metal level changes at the net inflow of metal over the area of the
+        bath, and the level of the top of the slag layer changes at the net
+        inflow of metal and slag.
+
+        Returns
+        -------
+        inflows : numpy.ndarray
+            The rates of change of the metal level and the slag level due to
+            the smelting of feed, m/s.
+        flows_to_rates : numpy.ndarray
+            The matrix of rates of change of the levels per unit of tapped
+            metal and slag flowrates, s/m2.
+
+        """
+        areaconst = 1 / (self.bedporosity * self.activeareafraction
+                         * 0.25 * pi * self.furnacediameter**2)
+        mdotmetal_in = (self.powerMVA * self.powerfactor /
+                        (3.6 * self.metalSER))
+        vdotmetal_in = mdotmetal_in / self.densitymetal
+        vdotslag_in = mdotmetal_in * self.slagmetalmassratio / self.densityslag
+        inflows = areaconst * numpy.array([vdotmetal_in,
+                                           vdotmetal_in + vdotslag_in])
+        flows_to_rates = -areaconst * numpy.array([[1.0, 0.0], [1.0, 1.0]])
+        return inflows, flows_to_rates
+
+    def _advance(self, dt, levels, rates, params, velocities):
+        """Advance the metal and slag levels over a single Runge-Kutta step.
+
+        Parameters
+        ----------
+        dt : float
+            Length of time step, in s.
+        levels : tuple of float
+            The metal level and the slag level at the start of the step, m.
+        rates : tuple of numpy.ndarray
+            The inflows and flows-to-rates matrix from _calc_rates.
+        params : tuple
+            The parameters from _calc_params.
+        velocities : list of float
+            The metal and slag velocities in the tap-hole, m/s, used as initial
+            guesses for the flow calculation and updated in place with the
+            velocities from each evaluation.
+
+        Returns
+        -------
+        levels : numpy.ndarray
+            The metal level and the slag level at the end of the step, m.
+        flows : numpy.ndarray
+            The metal and slag outflow rates averaged over the step, m3/s.
+        start_velocities : list of float
+            The metal and slag velocities in the tap-hole at the start of the
+            step, m/s.
+
+        """
+        start_velocities = []
+
+        def flows(levels):
+            umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
+                levels[0], levels[1], velocities[0], velocities[1], *params)
+            velocities[0], velocities[1] = umetal, uslag
+            if not start_velocities:
+                start_velocities.extend((umetal, uslag))
+            return numpy.array([vdotmetal_out, vdotslag_out])
+
+        levels, vdots = rk4_step(flows, levels, *rates, dt)
+        return levels, vdots, start_velocities
+
     def calc_dt(self, dt):
         """
         Integrate object state forward over a single time step.
+
+        The levels are advanced with a fourth-order Runge-Kutta step, and the
+        outlet flowrates are set to the average of the flowrates over the
+        step, so that the change in the amounts of metal and slag in the
+        furnace is exactly the amount added less the amount tapped.
 
         Parameters
         ----------
@@ -718,28 +829,13 @@ class SubmergedArcFurnace():
         None.
 
         """
-        areaconst = 1 / (self.bedporosity * self.activeareafraction
-                         * 0.25 * pi * self.furnacediameter**2)
-        mdotmetal_in = (self.powerMVA * self.powerfactor /
-                        (3.6 * self.metalSER))
-        vdotmetal_in = mdotmetal_in / self.densitymetal
-        vdotslag_in = mdotmetal_in * self.slagmetalmassratio / self.densityslag
-
-        umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
-            self.hmetal, self.hslag, self.umetal, self.uslag,
-            self.tapholediameter, self.tapholelength, self.tapholeheight,
-            self.tapholeroughness, self.entrykl, self.bedmindiameter,
-            self.bedmaxdiameter, self.bedporosity, self.particlediameter,
-            self.particlesphericity, self.densitymetal, self.densityslag,
-            self.viscositymetal, self.viscosityslag, self.tapholeopen_yn,
-            self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
-
-        dhmetal = dt * areaconst * (vdotmetal_in - vdotmetal_out)
-        dhslag = dt * areaconst * (vdotslag_in - vdotslag_out)
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
+        levels, vdots, (umetal, uslag) = self._advance(
+            dt, (self.hmetal, self.hslag), self._calc_rates(),
+            self._calc_params(), [self.umetal, self.uslag])
+        self.hmetal, self.hslag = float(levels[0]), float(levels[1])
         self.umetal, self.uslag = umetal, uslag
-        self.vdotmetal_out, self.vdotslag_out = vdotmetal_out, vdotslag_out
+        self.vdotmetal_out = float(vdots[0])
+        self.vdotslag_out = float(vdots[1])
 
     def calc_time_period(self, times):
         """
@@ -747,6 +843,10 @@ class SubmergedArcFurnace():
         model parameters are assumed to remain fixed during this period. This
         is more performant than individual time step calculations, for large
         parameter sweeps and similar applications.
+
+        Each step is a fourth-order Runge-Kutta step, as for calc_dt, and the
+        tapped masses are accumulated from the flowrates averaged over each
+        step.
 
         Parameters
         ----------
@@ -764,35 +864,22 @@ class SubmergedArcFurnace():
 
         """
         dts = [float(dt) for dt in times[1:] - times[:-1]]
-        params = (self.tapholediameter, self.tapholelength, self.tapholeheight,
-                  self.tapholeroughness, self.entrykl, self.bedmindiameter,
-                  self.bedmaxdiameter, self.bedporosity, self.particlediameter,
-                  self.particlesphericity, self.densitymetal, self.densityslag,
-                  self.viscositymetal, self.viscosityslag, self.tapholeopen_yn,
-                  self.allownegativeheights_yn, self.bedmodel, self.fdmodel)
-        areaconst = 1 / (self.bedporosity * self.activeareafraction
-                         * 0.25 * pi * self.furnacediameter**2)
-        mdotmetal_in = (self.powerMVA * self.powerfactor /
-                        (3.6 * self.metalSER))
-        vdotmetal_in = mdotmetal_in / self.densitymetal
-        vdotslag_in = mdotmetal_in * self.slagmetalmassratio / self.densityslag
-
-        densitymetal = self.densitymetal
-        densityslag = self.densityslag
+        params = self._calc_params()
+        rates = self._calc_rates()
         metalmassout, slagmassout = 0, 0
-        hmetal, hslag, umetal, uslag = self.hmetal, self.hslag, 1, 1
+        if not dts:
+            return metalmassout, slagmassout
+
+        levels, velocities = (self.hmetal, self.hslag), [1, 1]
         for dt in dts:
-            umetal, uslag, vdotmetal_out, vdotslag_out = self._calc_vdot_out(
-                hmetal, hslag, umetal, uslag, *params)
-            dhmetal = dt * areaconst * (vdotmetal_in - vdotmetal_out)
-            dhslag = dt * areaconst * (vdotslag_in - vdotslag_out)
-            hmetal += dhmetal
-            hslag += dhmetal + dhslag
-            metalmassout += dt * vdotmetal_out * densitymetal
-            slagmassout += dt * vdotslag_out * densityslag
+            levels, vdots, start_velocities = self._advance(
+                dt, levels, rates, params, velocities)
+            metalmassout += dt * vdots[0] * self.densitymetal
+            slagmassout += dt * vdots[1] * self.densityslag
 
-        self.hmetal, self.hslag = hmetal, hslag
-        self.umetal, self.uslag = umetal, uslag
-        self.vdotmetal_out, self.vdotslag_out = vdotmetal_out, vdotslag_out
+        self.hmetal, self.hslag = float(levels[0]), float(levels[1])
+        self.umetal, self.uslag = start_velocities
+        self.vdotmetal_out = float(vdots[0])
+        self.vdotslag_out = float(vdots[1])
 
-        return metalmassout, slagmassout
+        return float(metalmassout), float(slagmassout)
