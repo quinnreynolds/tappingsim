@@ -11,6 +11,7 @@ import math
 import numpy
 from scipy.constants import g
 
+from tappingsim.integrators import integrate
 from tappingsim.outlets import Outlet, overflowmodel_step
 
 
@@ -191,8 +192,9 @@ class SkimmerLaunder:
     out of each outlet is described by an overflow model, as for the ladle classes. With the
     default step model there is no entrainment, and the slag outflows are free of metal.
 
-    The state is integrated in time with a linearly-implicit (Rosenbrock-Euler) scheme, which
-    remains stable for time steps far beyond the limit of explicit schemes. That limit is
+    The state is integrated in time with a linearly-implicit (Rosenbrock-Euler) scheme (see
+    tappingsim.integrators), which remains stable for time steps far beyond the limit of
+    explicit schemes. That limit is
     proportional to the throughput and tends to zero as the flow does, because the flow
     through the weir underflow channel varies as the square root of the pressure difference.
     The step size is therefore limited by accuracy, not stability, and the scheme is first
@@ -213,9 +215,6 @@ class SkimmerLaunder:
         ],
         dtype=float,
     )
-
-    # Volume perturbation used to estimate the sensitivity of the flows to the state, m3.
-    _JACOBIAN_EPS = 1e-7
 
     def __init__(
         self,
@@ -384,11 +383,9 @@ class SkimmerLaunder:
             ) / dW
         return hm_ss, hs_ss, hm_ms, hs_ms
 
-    def _calc_vdot_out(self, dt):
+    def _calc_vdot_out(self, hm_ss, hs_ss, hm_ms, hs_ms):
         """Calculate volumetric outflow rates of metal and slag from the slag and metal
-        trough outlets for the current state, and update the slag_trough_vdotmetal_out,
-        slag_trough_vdotslag_out, metal_trough_vdotmetal_out and metal_trough_vdotslag_out
-        attributes.
+        trough outlets for the given levels.
 
         Overflow from a trough occurs when the top of the slag layer exceeds the outlet
         crest height. Each phase flows over the outlet as over a broad-crested weir, with
@@ -398,32 +395,47 @@ class SkimmerLaunder:
 
         Parameters
         ----------
-        dt : float
-            Length of time step, in s. Not used.
+        hm_ss : float
+            Level of metal in the slag trough, m.
+        hs_ss : float
+            Level of the top of the slag layer in the slag trough, m.
+        hm_ms : float
+            Level of metal in the metal trough, m.
+        hs_ms : float
+            Level of the top of the slag layer in the metal trough, m.
 
         Returns
         -------
-        None.
+        tuple of float
+            Flowrates of metal and slag out of the slag trough, then of metal and slag out
+            of the metal trough, m3/s.
 
         """
-        (
-            self.slag_trough_vdotmetal_out,
-            self.slag_trough_vdotslag_out,
-        ) = self.slag_trough_outlet.flowrates(self.slag_trough_hmetal, self.slag_trough_hslag)
-        (
-            self.metal_trough_vdotmetal_out,
-            self.metal_trough_vdotslag_out,
-        ) = self.metal_trough_outlet.flowrates(self.metal_trough_hmetal, self.metal_trough_hslag)
+        return (
+            *self.slag_trough_outlet.flowrates(hm_ss, hs_ss),
+            *self.metal_trough_outlet.flowrates(hm_ms, hs_ms),
+        )
 
-    def _calc_vdot_weir(self):
+    def _calc_vdot_weir(self, hm_ss, hs_ss, hm_ms, hs_ms):
         """Calculate the volumetric flowrates of metal and slag through the weir underflow
-        channel for the current state.
+        channel for the given levels.
 
         The flowrates are calculated from the hydrostatic pressure difference between the
         troughs, using the Bernoulli equation for the velocity of each phase. Depending on
         the position of the slag-metal interface and the free surface relative to the top of
         the underflow channel, the channel is filled by metal, by metal and slag, or only
         partially filled.
+
+        Parameters
+        ----------
+        hm_ss : float
+            Level of metal in the slag trough, m.
+        hs_ss : float
+            Level of the top of the slag layer in the slag trough, m.
+        hm_ms : float
+            Level of metal in the metal trough, m.
+        hs_ms : float
+            Level of the top of the slag layer in the metal trough, m.
 
         Returns
         -------
@@ -435,41 +447,30 @@ class SkimmerLaunder:
         # Assumptions and conventions:
         #  - Positive flow direction is from slag section to metal section
         #  - No deformation of slag-metal interface at weir inflow
+        # TODO: for a reversed flow (deltaP < 0) the phase proportions should come from the
+        #       metal trough side, not the slag trough side as below.
         A_w = self.weir_underflow_height * self.weir_underflow_width
-        P_ss = (
-            self.slag_trough_hmetal * self.density_metal * g
-            + (self.slag_trough_hslag - self.slag_trough_hmetal) * self.density_slag * g
-        )
-        P_ms = (
-            self.metal_trough_hmetal * self.density_metal * g
-            + (self.metal_trough_hslag - self.metal_trough_hmetal) * self.density_slag * g
-        )
+        P_ss = hm_ss * self.density_metal * g + (hs_ss - hm_ss) * self.density_slag * g
+        P_ms = hm_ms * self.density_metal * g + (hs_ms - hm_ms) * self.density_slag * g
         deltaP = P_ss - P_ms
         u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
         u_sw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_slag)
         # slag-metal interface in slag trough is above weir underflow channel
-        if self.slag_trough_hmetal > self.weir_underflow_height:
+        if hm_ss > self.weir_underflow_height:
             vdot_metal_12 = A_w * u_mw
             vdot_slag_12 = 0
         # slag-metal interface in slag trough is below weir underflow channel
-        elif self.slag_trough_hslag > self.weir_underflow_height:
-            vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
-            vdot_slag_12 = (1 - self.slag_trough_hmetal / self.weir_underflow_height) * A_w * u_sw
+        elif hs_ss > self.weir_underflow_height:
+            vdot_metal_12 = hm_ss / self.weir_underflow_height * A_w * u_mw
+            vdot_slag_12 = (1 - hm_ss / self.weir_underflow_height) * A_w * u_sw
         # free surface in slag trough is below weir underflow channel
         else:
-            vdot_metal_12 = self.slag_trough_hmetal / self.weir_underflow_height * A_w * u_mw
-            vdot_slag_12 = (
-                ((self.slag_trough_hslag - self.slag_trough_hmetal) / self.weir_underflow_height)
-                * A_w
-                * u_sw
-            )
+            vdot_metal_12 = hm_ss / self.weir_underflow_height * A_w * u_mw
+            vdot_slag_12 = ((hs_ss - hm_ss) / self.weir_underflow_height) * A_w * u_sw
         return vdot_metal_12, vdot_slag_12
 
     def _calc_flows(self, V):
         """Calculate all internal and outlet flowrates for a given set of phase volumes.
-
-        The level attributes and the outlet flowrate attributes are overwritten to match
-        the given volumes.
 
         Parameters
         ----------
@@ -484,75 +485,8 @@ class SkimmerLaunder:
             trough overflow, and metal and slag out of the metal trough overflow.
 
         """
-        (
-            self.slag_trough_hmetal,
-            self.slag_trough_hslag,
-            self.metal_trough_hmetal,
-            self.metal_trough_hslag,
-        ) = self._volumes_to_levels(*V)
-        vdot_metal_12, vdot_slag_12 = self._calc_vdot_weir()
-        self._calc_vdot_out(0.0)  # dt is not used by the outlet calculation
-        return numpy.array(
-            [
-                vdot_metal_12,
-                vdot_slag_12,
-                self.slag_trough_vdotmetal_out,
-                self.slag_trough_vdotslag_out,
-                self.metal_trough_vdotmetal_out,
-                self.metal_trough_vdotslag_out,
-            ]
-        )
-
-    def _step(self, dt, vdotmetal_in, vdotslag_in):
-        """Advance the state over a single linearly-implicit (Rosenbrock-Euler) step.
-
-        With the phase volumes V, the flows q(V) and the mass balance dV/dt = F*q + inflow
-        (where F is a constant matrix), the step is
-        dV = dt*(I - dt*J)^-1 * dV/dt, with the Jacobian J = F*dq/dV estimated by forward
-        differences. The flowrates over the step that exactly satisfy the volume balance
-        are q + dq/dV*dV.
-
-        Parameters
-        ----------
-        dt : float
-            Length of time step, in s.
-        vdotmetal_in : float
-            Flowrate of metal into the slag trough, m3/s.
-        vdotslag_in : float
-            Flowrate of slag into the slag trough, m3/s.
-
-        Returns
-        -------
-        numpy.ndarray
-            Effective flowrates over the step, in the order given by _calc_flows, m3/s.
-
-        """
-        V = numpy.array(
-            self._levels_to_volumes(
-                self.slag_trough_hmetal,
-                self.slag_trough_hslag,
-                self.metal_trough_hmetal,
-                self.metal_trough_hslag,
-            )
-        )
-        flows = self._calc_flows(V)
-        dflows_dV = numpy.empty((len(flows), len(V)))
-        for j in range(len(V)):
-            V_perturbed = V.copy()
-            V_perturbed[j] += self._JACOBIAN_EPS
-            dflows_dV[:, j] = (self._calc_flows(V_perturbed) - flows) / self._JACOBIAN_EPS
-        dV_dt = self._FLOWS_TO_VOLUME_RATES @ flows + numpy.array(
-            [vdotmetal_in, vdotslag_in, 0, 0]
-        )
-        jacobian = self._FLOWS_TO_VOLUME_RATES @ dflows_dV
-        V_delta = dt * numpy.linalg.solve(numpy.eye(len(V)) - dt * jacobian, dV_dt)
-        (
-            self.slag_trough_hmetal,
-            self.slag_trough_hslag,
-            self.metal_trough_hmetal,
-            self.metal_trough_hslag,
-        ) = self._volumes_to_levels(*(V + V_delta))
-        return flows + dflows_dV @ V_delta
+        levels = self._volumes_to_levels(*V)
+        return numpy.array([*self._calc_vdot_weir(*levels), *self._calc_vdot_out(*levels)])
 
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
@@ -560,10 +494,11 @@ class SkimmerLaunder:
         output flowrates.
 
         The time step is divided into equal sub-steps no longer than max_substep, each
-        integrated with a linearly-implicit (Rosenbrock-Euler) scheme. The inflow rates are
-        held constant over the time step. The outlet flowrates are set to the average of the
-        flowrates over the sub-steps, so that the change in the volumes held in the troughs
-        is exactly the volume added by the inflows less the volume leaving by the outlets.
+        integrated with a linearly-implicit (Rosenbrock-Euler) scheme (see
+        tappingsim.integrators.integrate). The inflow rates are held constant over the time
+        step. The outlet flowrates are set to the average of the flowrates over the
+        sub-steps, so that the change in the volumes held in the troughs is exactly the
+        volume added by the inflows less the volume leaving by the outlets.
 
         Parameters
         ----------
@@ -589,11 +524,33 @@ class SkimmerLaunder:
         example filling an empty launder in a single step of 10 s or more can produce
         negative volumes.
 
+        The phase volumes are not constrained to stay positive. The flow through the weir
+        underflow channel takes its phase proportions from the slag trough side whichever
+        way it flows, so a reversed flow (the metal trough pressure exceeding that of the slag
+        trough) can remove more slag from the metal trough than it holds, and the volumes
+        and levels then become unphysical.
+
         """
-        n_substeps = max(1, int(numpy.ceil(dt / self.max_substep)))
-        flows = sum(
-            self._step(dt / n_substeps, vdotmetal_in, vdotslag_in) for _ in range(n_substeps)
-        ) / n_substeps
+        V, flows = integrate(
+            self._calc_flows,
+            self._levels_to_volumes(
+                self.slag_trough_hmetal,
+                self.slag_trough_hslag,
+                self.metal_trough_hmetal,
+                self.metal_trough_hslag,
+            ),
+            numpy.array([vdotmetal_in, vdotslag_in, 0, 0]),
+            self._FLOWS_TO_VOLUME_RATES,
+            dt,
+            self.max_substep,
+            positive=False,  # see the Note on negative volumes above
+        )
+        (
+            self.slag_trough_hmetal,
+            self.slag_trough_hslag,
+            self.metal_trough_hmetal,
+            self.metal_trough_hslag,
+        ) = self._volumes_to_levels(*V)
         (
             self.slag_trough_vdotmetal_out,
             self.slag_trough_vdotslag_out,

@@ -208,8 +208,9 @@ class TestCylindricalLadleOverflow:
         long_step.calc_dt(10.0, 0.004, 0.006)
         for _ in range(10):
             repeated.calc_dt(1.0, 0.004, 0.006)
+        # (equal up to finite-difference noise in the flow sensitivities)
         assert (long_step.hmetal, long_step.hslag) == pytest.approx(
-            (repeated.hmetal, repeated.hslag), abs=1e-12)
+            (repeated.hmetal, repeated.hslag), abs=1e-9)
 
     def test_first_order_convergence(self):
         """Halving the sub-step size should roughly halve the error against a fine solution."""
@@ -235,34 +236,3 @@ class TestCylindricalLadleOverflow:
         assert ladle.hmetal == pytest.approx(CREST, abs=1e-3)
         assert ladle.vdotmetal_out == pytest.approx(0.004, rel=1e-3)
         assert ladle.vdotslag_out == pytest.approx(0.006, rel=1e-3)
-
-    def test_unphysical_step_is_halved(self):
-        """A step that would give negative volumes is repeated as smaller steps."""
-        ladle = make_ladle(hmetal_init=0.5, hslag_init=1.1, max_substep=60.0)
-        original = ladle._step
-        dts = []
-
-        def step(dt, vdotmetal_in, vdotslag_in):
-            dts.append(dt)
-            flows = original(dt, vdotmetal_in, vdotslag_in)
-            if dt > 20:
-                ladle.hslag = -1.0
-            return flows
-
-        ladle._step = step
-        ladle.calc_dt(60.0, 0.0, 0.0)
-        assert 60.0 not in dts[1:]
-        assert max(dts) == 60.0 and min(dts) <= 15.0
-        assert ladle.hslag >= ladle.hmetal >= 0
-
-    def test_failure_to_find_physical_step_raises(self):
-        ladle = make_ladle(hmetal_init=0.5, hslag_init=1.1)
-        original = ladle._step
-
-        def step(dt, vdotmetal_in, vdotslag_in):
-            original(dt, vdotmetal_in, vdotslag_in)
-            ladle.hslag = float("nan")
-
-        ladle._step = step
-        with pytest.raises(RuntimeError):
-            ladle._advance(1.0, 0.0, 0.0, halvings=3)

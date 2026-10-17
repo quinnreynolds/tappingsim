@@ -8,11 +8,10 @@ product and waste phases.
 
 """
 
-import math
-
 import numpy
 from scipy.constants import pi
 
+from tappingsim.integrators import integrate
 from tappingsim.outlets import Outlet
 
 
@@ -84,21 +83,21 @@ class CylindricalLadle():
     Note
     ----
     The state is integrated in time with a linearly-implicit (Rosenbrock-Euler)
-    scheme, as used by the skimmer launder. It is first order in time and
-    stable for any time step, as the flowrate over the outlet becomes stiffer
-    for large heads. The outlet flowrates reported after calc_dt are the
-    effective flowrates averaged over the time step, so that the change in the
-    volumes held in the ladle is exactly the volume added by the inflows less
-    the volume leaving over the outlet. If a step would produce negative phase
-    volumes, which can happen for very wide outlets relative to the time step,
-    it is repeated as smaller steps. The ladle walls are assumed to be high
-    enough that the contents do not spill elsewhere.
+    scheme (see tappingsim.integrators), as used by the skimmer launder. It is
+    first order in time and stable for any time step, as the flowrate over the
+    outlet becomes stiffer for large heads. The outlet flowrates reported after
+    calc_dt are the effective flowrates averaged over the time step, so that
+    the change in the volumes held in the ladle is exactly the volume added by
+    the inflows less the volume leaving over the outlet. If a step would
+    produce negative phase volumes, which can happen for very wide outlets
+    relative to the time step, it is repeated as smaller steps. The ladle walls
+    are assumed to be high enough that the contents do not spill elsewhere.
 
     """
 
-    # Volume perturbation used to estimate the sensitivity of the flows to
-    # the state, m3.
-    _JACOBIAN_EPS = 1e-7
+    # Mass balance coefficients linking the flows over the outlet to the rates
+    # of change of the metal and slag volumes.
+    _FLOWS_TO_VOLUME_RATES = -numpy.eye(2)
 
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
                  overflowmodel, outlet_width, outlet_slag_Cd, outlet_metal_Cd,
@@ -123,112 +122,25 @@ class CylindricalLadle():
         overflow outlet crest."""
         return self.outlet.crest_height
 
-    def _calc_flows(self, hmetal, hslag):
+    def _calc_flows(self, V):
         """Calculate the open-channel flowrates of metal and slag over the
-        outlet for given levels, without changing the state.
+        outlet for given phase volumes.
 
         Parameters
         ----------
-        hmetal : float
-            Level of metal in the ladle, m.
-        hslag : float
-            Level of the top of the slag layer in the ladle, m.
+        V : array_like of float
+            Volumes of metal and slag in the ladle, m3.
 
         Returns
         -------
-        tuple of float
+        numpy.ndarray
             Volumetric flowrates of metal and slag over the outlet, m3/s.
 
         """
-        return self.outlet.flowrates(hmetal, hslag)
-
-    def _step(self, dt, vdotmetal_in, vdotslag_in):
-        """Advance the state over a single linearly-implicit (Rosenbrock-Euler)
-        step.
-
-        With the phase volumes V, the outflows q(V) and the inflows, the step
-        is dV = dt*(I + dt*dq/dV)^-1 * (inflow - q), with dq/dV estimated by
-        forward differences. The flowrates over the step that exactly satisfy
-        the volume balance are q + dq/dV*dV.
-
-        Parameters
-        ----------
-        dt : float
-            Length of time step, in s.
-        vdotmetal_in : float
-            Flowrate of metal into the ladle, m3/s.
-        vdotslag_in : float
-            Flowrate of slag into the ladle, m3/s.
-
-        Returns
-        -------
-        numpy.ndarray
-            Effective flowrates of metal and slag over the outlet, m3/s.
-
-        """
         xarea = 0.25 * pi * self.diameter**2
-
-        def flows(V):
-            hmetal = V[0] / xarea
-            return numpy.array(self._calc_flows(hmetal, hmetal + V[1] / xarea))
-
-        V = numpy.array([xarea * self.hmetal,
-                         xarea * (self.hslag - self.hmetal)])
-        q = flows(V)
-        dq_dV = numpy.empty((2, 2))
-        for j in range(2):
-            V_perturbed = V.copy()
-            V_perturbed[j] += self._JACOBIAN_EPS
-            dq_dV[:, j] = (flows(V_perturbed) - q) / self._JACOBIAN_EPS
-        inflow = numpy.array([vdotmetal_in, vdotslag_in])
-        V_delta = dt * numpy.linalg.solve(numpy.eye(2) + dt * dq_dV,
-                                          inflow - q)
-        V_new = V + V_delta
-        self.hmetal = V_new[0] / xarea
-        self.hslag = self.hmetal + V_new[1] / xarea
-        return q + dq_dV @ V_delta
-
-    def _advance(self, dt, vdotmetal_in, vdotslag_in, halvings=30):
-        """Advance the state over a time step, repeating the step as two
-        half-steps if the result is not physical.
-
-        A very large step relative to the stiffness of the flow over the
-        outlet can overshoot to negative phase volumes. The step is then
-        repeated as two half-steps, to any depth up to the given number of
-        halvings. Rounding-sized negative volumes are set to zero.
-
-        Parameters
-        ----------
-        dt : float
-            Length of time step, in s.
-        vdotmetal_in : float
-            Flowrate of metal into the ladle, m3/s.
-        vdotslag_in : float
-            Flowrate of slag into the ladle, m3/s.
-        halvings : int
-            The number of times the step can be halved before giving up.
-
-        Returns
-        -------
-        numpy.ndarray
-            Effective flowrates of metal and slag over the outlet, m3/s.
-
-        """
-        hmetal_0, hslag_0 = self.hmetal, self.hslag
-        flows = self._step(dt, vdotmetal_in, vdotslag_in)
-        tol = 1e-12
-        if (numpy.isfinite(self.hslag) and self.hmetal > -tol
-                and self.hslag - self.hmetal > -tol):
-            self.hmetal = max(self.hmetal, 0)
-            self.hslag = max(self.hslag, self.hmetal)
-            return flows
-        if halvings == 0:
-            raise RuntimeError("could not advance the ladle state over the "
-                               "time step with positive volumes")
-        self.hmetal, self.hslag = hmetal_0, hslag_0
-        return 0.5 * (
-            self._advance(0.5 * dt, vdotmetal_in, vdotslag_in, halvings - 1)
-            + self._advance(0.5 * dt, vdotmetal_in, vdotslag_in, halvings - 1))
+        hmetal = V[0] / xarea
+        hslag = hmetal + V[1] / xarea
+        return numpy.array(self.outlet.flowrates(hmetal, hslag))
 
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
@@ -236,11 +148,11 @@ class CylindricalLadle():
         output flowrates.
 
         The time step is divided into equal sub-steps no longer than
-        max_substep, each integrated with a linearly-implicit scheme. The
-        inflow rates are held constant over the time step. The outlet
-        flowrates are set to the average of the flowrates over the sub-steps.
-        A ladle that stays below the crest over the whole time step is filled
-        exactly in a single step.
+        max_substep, each integrated with a linearly-implicit scheme (see
+        tappingsim.integrators.integrate). The inflow rates are held constant
+        over the time step. The outlet flowrates are set to the average of the
+        flowrates over the sub-steps. A ladle that stays below the crest over
+        the whole time step is filled exactly in a single step.
 
         Parameters
         ----------
@@ -267,8 +179,15 @@ class CylindricalLadle():
             self.vdotmetal_out = 0
             self.vdotslag_out = 0
             return
-        n_substeps = max(1, int(math.ceil(dt / self.max_substep)))
-        flows = sum(
-            self._advance(dt / n_substeps, vdotmetal_in, vdotslag_in)
-            for _ in range(n_substeps)) / n_substeps
+        V, flows = integrate(
+            self._calc_flows,
+            numpy.array([xarea * self.hmetal,
+                         xarea * (self.hslag - self.hmetal)]),
+            numpy.array([vdotmetal_in, vdotslag_in]),
+            self._FLOWS_TO_VOLUME_RATES,
+            dt,
+            self.max_substep,
+        )
+        self.hmetal = V[0] / xarea
+        self.hslag = self.hmetal + V[1] / xarea
         self.vdotmetal_out, self.vdotslag_out = flows

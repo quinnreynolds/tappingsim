@@ -26,6 +26,8 @@ The core models are:
   open-channel outlet.
 - **Outlets**: open-channel flow over a weir crest, with models for metal entrained in the slag
   overflow, shared by the ladle and launder models.
+- **Integrators**: the linearly-implicit time integration of the phase volumes in the ladle and
+  launder models, stable for large time steps.
 
 Getting Started
 ---------------
