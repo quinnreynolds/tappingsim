@@ -20,8 +20,12 @@ The core models are:
   tapped out through a configurable taphole model.
 - **Taphole flow**: packed-bed pressure drop (Kozeny-Carman or Ergun) and pipe friction factor
   (Bellos, Cheng, or Serghides) correlations to compute volumetric outflow.
-- **Launders**: simple pass-through models routing flow from the furnace taphole to ladles.
-- **Ladles**: cylindrical vessels that accumulate metal and slag, with overflow models.
+- **Launders**: pass-through and two-tank skimmer models routing flow from the furnace taphole
+  to ladles.
+- **Ladles**: cylindrical vessels that accumulate metal and slag, and overflow through an
+  open-channel outlet.
+- **Outlets**: open-channel flow over a weir crest, with models for metal entrained in the slag
+  overflow, shared by the ladle and launder models.
 
 Getting Started
 ---------------

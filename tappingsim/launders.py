@@ -11,7 +11,7 @@ import math
 import numpy
 from scipy.constants import g
 
-from tappingsim.ladles import OUTLET_PREMULT, overflow_flowrates, overflowmodel_step
+from tappingsim.outlets import Outlet, overflowmodel_step
 
 
 def _sqrt(x):
@@ -121,14 +121,12 @@ class SkimmerLaunder:
         into equal sub-steps no longer than this. The default is 1 s.
     slag_trough_overflowmodel : function, optional
         Function to be used to model the entrainment of metal in the slag flowing out of the
-        slag trough outlet, as for the ladle classes. The default is no entrainment.
-    slag_trough_overflowconsts : list of float, optional
-        Empirical parameters for the slag trough overflow model.
+        slag trough outlet. It takes the distance of the slag-metal interface below the outlet
+        crest, in m, and returns the metal volume fraction in the slag stream (see
+        tappingsim.outlets). The default is no entrainment.
     metal_trough_overflowmodel : function, optional
         Function to be used to model the entrainment of metal in the slag flowing out of the
-        metal trough outlet, as for the ladle classes. The default is no entrainment.
-    metal_trough_overflowconsts : list of float, optional
-        Empirical parameters for the metal trough overflow model.
+        metal trough outlet, as for the slag trough. The default is no entrainment.
 
     Attributes
     ----------
@@ -140,10 +138,6 @@ class SkimmerLaunder:
         The internal width of the slag trough at the floor, m.
     slag_trough_height : float
         The internal height of the slag trough, m.
-    slag_trough_outlet_height : float
-        The height of the slag trough outlet crest above the floor, m.
-    slag_trough_outlet_width : float
-        The width of the slag trough overflow outlet, m.
     weir_underflow_height : float
         The height of the underflow channel under the weir, m.
     weir_underflow_width : float
@@ -156,30 +150,17 @@ class SkimmerLaunder:
         The internal width of the metal trough at the floor, m.
     metal_trough_height : float
         The internal height of the metal trough, m.
-    metal_trough_outlet_height : float
-        The height of the metal trough outlet crest above the floor, m.
-    metal_trough_outlet_width : float
-        The width of the metal trough overflow outlet, m.
-    slag_trough_outlet_slag_Cd : float
-        Slag discharge coefficient of the slag trough outlet.
-    slag_trough_outlet_metal_Cd : float
-        Metal discharge coefficient of the slag trough outlet.
-    metal_trough_outlet_slag_Cd : float
-        Slag discharge coefficient of the metal trough outlet.
-    metal_trough_outlet_metal_Cd : float
-        Metal discharge coefficient of the metal trough outlet.
+    slag_trough_outlet : tappingsim.outlets.Outlet
+        The slag trough overflow outlet, with its crest height above the trough floor, width,
+        discharge coefficients, phase densities and overflow model.
+    metal_trough_outlet : tappingsim.outlets.Outlet
+        The metal trough overflow outlet, as for the slag trough.
     density_metal : float
         The density of the metal phase, kg/m3.
     density_slag : float
         The density of the slag phase, kg/m3.
     max_substep : float
         The longest internal time step used by calc_dt, in s.
-    slag_trough_overflowmodel : function
-        Reference to internal lambda function created for overflow modelling at the slag
-        trough outlet.
-    metal_trough_overflowmodel : function
-        Reference to internal lambda function created for overflow modelling at the metal
-        trough outlet.
     slag_trough_hmetal : float
         The current level of metal in the slag trough, m.
     slag_trough_hslag : float
@@ -199,8 +180,6 @@ class SkimmerLaunder:
         The current outlet volume flowrate of metal from the metal trough overflow, m3/s.
     metal_trough_vdotslag_out : float
         The current outlet volume flowrate of slag from the metal trough overflow, m3/s.
-    outlet_premult : float
-        Constant pre-multiplier, 2/3*sqrt(g), in the overflow outlet flow expressions.
 
     Note
     ----
@@ -269,9 +248,7 @@ class SkimmerLaunder:
         max_substep=1.0,
         # entrainment of metal in the slag overflow from each trough
         slag_trough_overflowmodel=overflowmodel_step,
-        slag_trough_overflowconsts=(),
         metal_trough_overflowmodel=overflowmodel_step,
-        metal_trough_overflowconsts=(),
     ):
         if max_substep <= 0:
             raise ValueError("max_substep must be positive")
@@ -279,20 +256,30 @@ class SkimmerLaunder:
         self.slag_trough_upper_width = slag_trough_upper_width
         self.slag_trough_lower_width = slag_trough_lower_width
         self.slag_trough_height = slag_trough_height
-        self.slag_trough_outlet_height = slag_trough_outlet_height
-        self.slag_trough_outlet_width = slag_trough_outlet_width
         self.weir_underflow_height = weir_underflow_height
         self.weir_underflow_width = weir_underflow_width
         self.metal_trough_length = metal_trough_length
         self.metal_trough_upper_width = metal_trough_upper_width
         self.metal_trough_lower_width = metal_trough_lower_width
         self.metal_trough_height = metal_trough_height
-        self.metal_trough_outlet_height = metal_trough_outlet_height
-        self.metal_trough_outlet_width = metal_trough_outlet_width
-        self.slag_trough_outlet_slag_Cd = slag_trough_outlet_slag_Cd
-        self.slag_trough_outlet_metal_Cd = slag_trough_outlet_metal_Cd
-        self.metal_trough_outlet_slag_Cd = metal_trough_outlet_slag_Cd
-        self.metal_trough_outlet_metal_Cd = metal_trough_outlet_metal_Cd
+        self.slag_trough_outlet = Outlet(
+            slag_trough_outlet_height,
+            slag_trough_outlet_width,
+            slag_trough_outlet_slag_Cd,
+            slag_trough_outlet_metal_Cd,
+            density_metal,
+            density_slag,
+            slag_trough_overflowmodel,
+        )
+        self.metal_trough_outlet = Outlet(
+            metal_trough_outlet_height,
+            metal_trough_outlet_width,
+            metal_trough_outlet_slag_Cd,
+            metal_trough_outlet_metal_Cd,
+            density_metal,
+            density_slag,
+            metal_trough_overflowmodel,
+        )
         self.density_metal = density_metal
         self.density_slag = density_slag
         self.metal_trough_vdotmetal_out = 0
@@ -304,13 +291,6 @@ class SkimmerLaunder:
         self.slag_trough_hmetal = 0
         self.slag_trough_hslag = 0
         self.max_substep = max_substep
-        self.slag_trough_overflowmodel = lambda dh: slag_trough_overflowmodel(
-            dh, *slag_trough_overflowconsts
-        )
-        self.metal_trough_overflowmodel = lambda dh: metal_trough_overflowmodel(
-            dh, *metal_trough_overflowconsts
-        )
-        self.outlet_premult = OUTLET_PREMULT
 
     def _levels_to_volumes(self, hm_ss, hs_ss, hm_ms, hs_ms):
         """Convert phase levels in the two troughs to phase volumes.
@@ -413,8 +393,8 @@ class SkimmerLaunder:
         Overflow from a trough occurs when the top of the slag layer exceeds the outlet
         crest height. Each phase flows over the outlet as over a broad-crested weir, with
         flowrate proportional to Cd*width*head**1.5, as described in
-        tappingsim.ladles.overflow_flowrates. Metal entrainment in the slag outflow is
-        calculated using the configured overflow model of each trough.
+        tappingsim.outlets.Outlet. Metal entrainment in the slag outflow is calculated
+        using the configured overflow model of each trough.
 
         Parameters
         ----------
@@ -426,35 +406,14 @@ class SkimmerLaunder:
         None.
 
         """
-        density_ratio = self.density_slag / self.density_metal
-        # slag section
         (
             self.slag_trough_vdotmetal_out,
             self.slag_trough_vdotslag_out,
-        ) = overflow_flowrates(
-            self.slag_trough_hmetal,
-            self.slag_trough_hslag,
-            self.slag_trough_outlet_height,
-            self.slag_trough_outlet_width,
-            self.slag_trough_outlet_slag_Cd,
-            self.slag_trough_outlet_metal_Cd,
-            density_ratio,
-            self.slag_trough_overflowmodel,
-        )
-        # metal section
+        ) = self.slag_trough_outlet.flowrates(self.slag_trough_hmetal, self.slag_trough_hslag)
         (
             self.metal_trough_vdotmetal_out,
             self.metal_trough_vdotslag_out,
-        ) = overflow_flowrates(
-            self.metal_trough_hmetal,
-            self.metal_trough_hslag,
-            self.metal_trough_outlet_height,
-            self.metal_trough_outlet_width,
-            self.metal_trough_outlet_slag_Cd,
-            self.metal_trough_outlet_metal_Cd,
-            density_ratio,
-            self.metal_trough_overflowmodel,
-        )
+        ) = self.metal_trough_outlet.flowrates(self.metal_trough_hmetal, self.metal_trough_hslag)
 
     def _calc_vdot_weir(self):
         """Calculate the volumetric flowrates of metal and slag through the weir underflow

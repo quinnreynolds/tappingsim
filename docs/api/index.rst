@@ -7,4 +7,5 @@ API Reference
    furnaces
    ladles
    launders
+   outlets
    tappingsystems

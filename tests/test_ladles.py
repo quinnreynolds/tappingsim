@@ -1,51 +1,12 @@
 """Unit tests for tappingsim.ladles module."""
 
+import functools
 import math
+
 import pytest
 from scipy.constants import g
-from tappingsim.ladles import (
-    CylindricalLadle, overflow_flowrates, overflowmodel_exp, overflowmodel_step,
-)
-
-
-# ---------------------------------------------------------------------------
-# Overflow models
-# ---------------------------------------------------------------------------
-
-class TestOverflowmodelStep:
-    def test_returns_zero(self):
-        assert overflowmodel_step(0.5) == 0
-
-    def test_returns_zero_negative_delta(self):
-        assert overflowmodel_step(-0.5) == 0
-
-    def test_ignores_consts(self):
-        assert overflowmodel_step(0.5, 1.0, 2.0) == 0
-
-
-class TestOverflowmodelExp:
-    def test_positive_delta_decays(self):
-        """Entrainment should decay exponentially when interface is below outlet."""
-        f = overflowmodel_exp(0.5, 0.1, 2.0)
-        assert f == pytest.approx(0.036787944117144235, rel=1e-8)
-
-    def test_negative_delta_returns_premultiplier(self):
-        """When interface is above outlet, return full pre-multiplier."""
-        f = overflowmodel_exp(-0.5, 0.1, 2.0)
-        assert f == pytest.approx(0.1, rel=1e-8)
-
-    def test_zero_delta_returns_premultiplier(self):
-        f = overflowmodel_exp(0.0, 0.1, 2.0)
-        assert f == pytest.approx(0.1, rel=1e-8)
-
-    def test_large_positive_delta_approaches_zero(self):
-        f = overflowmodel_exp(100.0, 0.1, 2.0)
-        assert f == pytest.approx(0.0, abs=1e-80)
-
-
-# ---------------------------------------------------------------------------
-# Open-channel overflow flowrates
-# ---------------------------------------------------------------------------
+from tappingsim.ladles import CylindricalLadle
+from tappingsim.outlets import overflowmodel_exp, overflowmodel_step
 
 K = 2 / 3 * math.sqrt(g)
 RHO_METAL, RHO_SLAG = 7000.0, 3000.0
@@ -53,66 +14,8 @@ CREST = 1.0
 AREA = math.pi * 0.25 * 1.8**2
 
 
-def fraction_model(dh, fraction):
-    """Entrainment model with a constant metal fraction, for testing."""
-    return fraction
-
-
-class TestOverflowFlowrates:
-    ratio = RHO_SLAG / RHO_METAL
-
-    def flows(self, hmetal, hslag, model=overflowmodel_step, consts=()):
-        return overflow_flowrates(
-            hmetal, hslag, CREST, 0.4, 0.6, 0.55, self.ratio, lambda dh: model(dh, *consts))
-
-    def test_no_flow_below_crest(self):
-        assert self.flows(0.5, 0.99) == (0, 0)
-
-    def test_no_flow_at_crest(self):
-        assert self.flows(0.5, CREST) == (0, 0)
-
-    def test_slag_only_flow(self):
-        qmetal, qslag = self.flows(0.5, 1.1)
-        assert qmetal == 0
-        assert qslag == pytest.approx(K * 0.6 * 0.4 * 0.1**1.5)
-
-    def test_metal_and_slag_flow(self):
-        qmetal, qslag = self.flows(1.05, 1.25)
-        assert qslag == pytest.approx(K * 0.6 * 0.4 * 0.2**1.5)
-        expected = K * 0.55 * 0.4 * ((self.ratio * 0.2 + 0.05) ** 1.5 - (self.ratio * 0.2) ** 1.5)
-        assert qmetal == pytest.approx(expected)
-
-    def test_metal_only_flow(self):
-        """No slag layer: metal flows with its own head above the crest."""
-        qmetal, qslag = self.flows(1.1, 1.1)
-        assert qslag == 0
-        assert qmetal == pytest.approx(K * 0.55 * 0.4 * 0.1**1.5)
-
-    def test_entrained_metal_in_slag_only_flow(self):
-        qmetal, qslag = self.flows(0.5, 1.1, overflowmodel_exp, [0.2, 2.0])
-        vfrac = 0.2 * math.exp(-2.0 * 0.5)
-        total = K * 0.6 * 0.4 * 0.1**1.5
-        assert qmetal == pytest.approx(vfrac * total)
-        assert qslag == pytest.approx((1 - vfrac) * total)
-
-    def test_entrained_metal_adds_to_metal_flow(self):
-        plain = self.flows(1.05, 1.25)
-        qmetal, qslag = self.flows(1.05, 1.25, overflowmodel_exp, [0.2, 2.0])
-        qslag_total = K * 0.6 * 0.4 * 0.2**1.5
-        assert qmetal == pytest.approx(plain[0] + 0.2 * qslag_total)
-        assert qslag == pytest.approx(0.8 * qslag_total)
-
-    def test_no_entrainment_without_metal(self):
-        """There is no metal to entrain, even if the model returns a nonzero fraction."""
-        qmetal, qslag = self.flows(0.0, 1.1, fraction_model, [0.3])
-        assert qmetal == 0
-        assert qslag == pytest.approx(K * 0.6 * 0.4 * 0.1**1.5)
-
-    def test_total_flow_independent_of_entrainment(self):
-        """Entrainment redistributes the slag stream between phases, not its total."""
-        plain = self.flows(0.5, 1.1)
-        entrained = self.flows(0.5, 1.1, fraction_model, [0.3])
-        assert sum(entrained) == pytest.approx(sum(plain))
+def exp_model(premultiplier, decay):
+    return functools.partial(overflowmodel_exp, premultiplier=premultiplier, decay=decay)
 
 
 # ---------------------------------------------------------------------------
@@ -120,10 +23,10 @@ class TestOverflowFlowrates:
 # ---------------------------------------------------------------------------
 
 def make_ladle(depth=CREST, hmetal_init=0.0, hslag_init=0.0, overflowmodel=overflowmodel_step,
-               overflowconsts=(), **overrides):
+               **overrides):
     params = dict(
         diameter=1.8, depth=depth, hmetal_init=hmetal_init, hslag_init=hslag_init,
-        overflowmodel=overflowmodel, overflowconsts=list(overflowconsts),
+        overflowmodel=overflowmodel,
         outlet_width=0.4, outlet_slag_Cd=0.6, outlet_metal_Cd=0.55,
         density_metal=RHO_METAL, density_slag=RHO_SLAG,
     )
@@ -155,11 +58,13 @@ class TestCylindricalLadleInit:
         assert empty_ladle.depth == 2.0
 
     def test_outlet_parameters_stored(self, empty_ladle):
-        assert empty_ladle.outlet_width == 0.4
-        assert empty_ladle.outlet_slag_Cd == 0.6
-        assert empty_ladle.outlet_metal_Cd == 0.55
-        assert empty_ladle.density_metal == RHO_METAL
-        assert empty_ladle.density_slag == RHO_SLAG
+        assert empty_ladle.outlet.crest_height == 2.0
+        assert empty_ladle.outlet.width == 0.4
+        assert empty_ladle.outlet.slag_Cd == 0.6
+        assert empty_ladle.outlet.metal_Cd == 0.55
+        assert empty_ladle.outlet.density_metal == RHO_METAL
+        assert empty_ladle.outlet.density_slag == RHO_SLAG
+        assert empty_ladle.outlet.overflowmodel is overflowmodel_step
 
     def test_default_max_substep(self, empty_ladle):
         assert empty_ladle.max_substep == 1.0
@@ -184,7 +89,7 @@ class TestCylindricalLadleInit:
     def test_outlet_parameters_are_required(self, missing):
         params = dict(
             diameter=1.8, depth=CREST, hmetal_init=0.0, hslag_init=0.0,
-            overflowmodel=overflowmodel_step, overflowconsts=[],
+            overflowmodel=overflowmodel_step,
             outlet_width=0.4, outlet_slag_Cd=0.6, outlet_metal_Cd=0.55,
             density_metal=RHO_METAL, density_slag=RHO_SLAG,
         )
@@ -273,15 +178,14 @@ class TestCylindricalLadleOverflow:
 
     def test_metal_and_slag_steady_state(self):
         """With both phases flowing in, both leave at the inflow rates."""
-        ladle = make_ladle(overflowmodel=overflowmodel_exp, overflowconsts=[0.1, 2.0])
+        ladle = make_ladle(overflowmodel=exp_model(0.1, 2.0))
         for _ in range(100):
             ladle.calc_dt(60, 0.004, 0.006)
         assert ladle.vdotmetal_out == pytest.approx(0.004, rel=1e-6)
         assert ladle.vdotslag_out == pytest.approx(0.006, rel=1e-6)
 
     def test_mass_balance_over_step_with_entrainment(self):
-        ladle = make_ladle(hmetal_init=1.05, hslag_init=1.2, overflowmodel=overflowmodel_exp,
-                           overflowconsts=[0.1, 2.0])
+        ladle = make_ladle(hmetal_init=1.05, hslag_init=1.2, overflowmodel=exp_model(0.1, 2.0))
         metal0, slag0 = stored_volumes(ladle)
         ladle.calc_dt(60, 0.02, 0.03)
         metal1, slag1 = stored_volumes(ladle)
@@ -291,8 +195,7 @@ class TestCylindricalLadleOverflow:
 
     def test_entrainment_moves_metal_into_slag_outflow(self):
         step = make_ladle(hmetal_init=0.5, hslag_init=1.1)
-        exp = make_ladle(hmetal_init=0.5, hslag_init=1.1, overflowmodel=overflowmodel_exp,
-                         overflowconsts=[0.2, 2.0])
+        exp = make_ladle(hmetal_init=0.5, hslag_init=1.1, overflowmodel=exp_model(0.2, 2.0))
         step.calc_dt(1, 0.0, 0.0)
         exp.calc_dt(1, 0.0, 0.0)
         assert step.vdotmetal_out == 0

@@ -3,7 +3,8 @@
 import numpy
 import pytest
 from tappingsim.furnaces import SubmergedArcFurnace, bedmodel_ergun, fdmodel_cheng
-from tappingsim.ladles import CylindricalLadle, overflowmodel_step
+from tappingsim.ladles import CylindricalLadle
+from tappingsim.outlets import overflowmodel_step
 from tappingsim.launders import SimpleSisoLaunder
 from tappingsim.tappingsystems import SAF, SAFWithLadles
 
@@ -55,7 +56,7 @@ def saf_with_ladles_system(furnace_params):
     ladles = [
         CylindricalLadle(
             diameter=1.8, depth=2.0, hmetal_init=0, hslag_init=0,
-            overflowmodel=overflowmodel_step, overflowconsts=[],
+            overflowmodel=overflowmodel_step,
             outlet_width=0.3, outlet_slag_Cd=0.6, outlet_metal_Cd=0.6,
             density_metal=7000, density_slag=3000,
         )
@@ -232,7 +233,7 @@ class TestSAFWithOpenChannelLadles:
         ladles = [
             CylindricalLadle(
                 diameter=1.8, depth=0.5, hmetal_init=0, hslag_init=0,
-                overflowmodel=overflowmodel_step, overflowconsts=[],
+                overflowmodel=overflowmodel_step,
                 outlet_width=0.3, outlet_slag_Cd=0.6, outlet_metal_Cd=0.6,
                 density_metal=7000, density_slag=3000,
             )
