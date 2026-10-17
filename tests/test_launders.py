@@ -216,8 +216,9 @@ class TestSkimmerLaunderCalcDt:
         skimmer.calc_dt(1.0, 0.01, 0.02)
         assert skimmer.slag_trough_hmetal > 0
         assert skimmer.slag_trough_hslag > skimmer.slag_trough_hmetal
-        assert skimmer.metal_trough_hmetal == pytest.approx(0)
-        assert skimmer.metal_trough_hslag == pytest.approx(0)
+        # material starts to pass the weir at once, but the metal trough fills much more slowly
+        assert 0 <= skimmer.metal_trough_hmetal < 0.01 * skimmer.slag_trough_hmetal
+        assert 0 <= skimmer.metal_trough_hslag < 0.01 * skimmer.slag_trough_hslag
 
     def test_volume_added_matches_inflow(self, skimmer):
         skimmer.calc_dt(2.0, 0.01, 0.02)
@@ -271,8 +272,7 @@ class TestSkimmerLaunderCalcDt:
         assert metal_transferred(0.2) < metal_transferred(0.1)
 
     def test_steady_state_outflow_matches_inflow(self, skimmer):
-        """Constant inflow eventually leaves entirely through the two overflows.
-        Uses a small time step, as explicit integration is unstable for large dt."""
+        """Constant inflow eventually leaves entirely through the two overflows."""
         vdotmetal_in, vdotslag_in = 0.01, 0.02
         for _ in range(30000):
             skimmer.calc_dt(0.1, vdotmetal_in, vdotslag_in)
@@ -282,3 +282,113 @@ class TestSkimmerLaunderCalcDt:
         assert slag_out == pytest.approx(vdotslag_in, rel=1e-3)
         assert skimmer.slag_trough_hslag < skimmer.slag_trough_height
         assert skimmer.metal_trough_hslag < skimmer.metal_trough_height
+
+
+def weir_pressure_difference(launder):
+    """Hydrostatic pressure at the floor of the slag trough less that of the metal trough, Pa."""
+    def pressure(hmetal, hslag):
+        return (hmetal * RHO_METAL + (hslag - hmetal) * RHO_SLAG) * g
+
+    return (
+        pressure(launder.slag_trough_hmetal, launder.slag_trough_hslag)
+        - pressure(launder.metal_trough_hmetal, launder.metal_trough_hslag)
+    )
+
+
+def levels(launder):
+    return numpy.array(
+        [
+            launder.slag_trough_hmetal,
+            launder.slag_trough_hslag,
+            launder.metal_trough_hmetal,
+            launder.metal_trough_hslag,
+        ]
+    )
+
+
+class TestSkimmerLaunderTimeIntegration:
+    def test_default_max_substep(self, skimmer):
+        assert skimmer.max_substep == 1.0
+
+    @pytest.mark.parametrize("max_substep", [0, -1.0])
+    def test_invalid_max_substep_rejected(self, max_substep):
+        with pytest.raises(ValueError):
+            make_skimmer(max_substep=max_substep)
+
+    def test_long_step_equals_repeated_substeps(self):
+        """A step longer than max_substep is divided into equal sub-steps."""
+        long_step, repeated = make_skimmer(max_substep=2.0), make_skimmer(max_substep=2.0)
+        long_step.calc_dt(10.0, 0.01, 0.02)
+        for _ in range(5):
+            repeated.calc_dt(2.0, 0.01, 0.02)
+        assert levels(long_step) == pytest.approx(levels(repeated), abs=1e-12)
+
+    def test_mass_balance_over_long_step_with_overflow(self, skimmer):
+        """The outflows reported for a step spanning many sub-steps are the average over
+        the step, so stored volume changes by inflow less outflow."""
+        set_levels(skimmer, 0.55, 0.7, 0.3, 0.45)
+        dt, vdotmetal_in, vdotslag_in = 60.0, 0.03, 0.05
+        vmetal0, vslag0 = total_volumes(skimmer)
+        skimmer.calc_dt(dt, vdotmetal_in, vdotslag_in)
+        vmetal1, vslag1 = total_volumes(skimmer)
+        metal_out = skimmer.slag_trough_vdotmetal_out + skimmer.metal_trough_vdotmetal_out
+        slag_out = skimmer.slag_trough_vdotslag_out + skimmer.metal_trough_vdotslag_out
+        assert metal_out > 0 and slag_out > 0
+        assert vmetal1 - vmetal0 == pytest.approx((vdotmetal_in - metal_out) * dt)
+        assert vslag1 - vslag0 == pytest.approx((vdotslag_in - slag_out) * dt)
+
+    @pytest.mark.parametrize("dt", [0.5, 1.0, 2.0])
+    def test_steady_state_reached_without_oscillation(self, dt):
+        """Regression test: an explicit scheme oscillates between two states at these
+        step sizes (its stability limit is about 0.2 s for this flow)."""
+        launder = make_skimmer(max_substep=dt)
+        vdotmetal_in, vdotslag_in = 0.01, 0.02
+        for _ in range(int(3000 / dt)):
+            launder.calc_dt(dt, vdotmetal_in, vdotslag_in)
+        before = levels(launder)
+        launder.calc_dt(dt, vdotmetal_in, vdotslag_in)
+        # (an explicit scheme alternates between states about 1e-2 m apart)
+        assert levels(launder) == pytest.approx(before, abs=1e-6)
+        metal_out = launder.slag_trough_vdotmetal_out + launder.metal_trough_vdotmetal_out
+        slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
+        assert metal_out == pytest.approx(vdotmetal_in, rel=1e-3)
+        assert slag_out == pytest.approx(vdotslag_in, rel=1e-3)
+
+    def test_steady_state_independent_of_step_size(self):
+        """The steady state is where the flows balance, so it does not depend on dt."""
+        results = []
+        for dt in (0.25, 2.0):
+            launder = make_skimmer(max_substep=dt)
+            for _ in range(int(3000 / dt)):
+                launder.calc_dt(dt, 0.01, 0.02)
+            results.append(levels(launder))
+        assert results[0] == pytest.approx(results[1], abs=1e-6)
+
+    def test_weir_pressure_difference_stays_small_after_shutoff(self):
+        """Regression test: after the inflow stops the pressure difference across the weir
+        should decay towards zero. An explicit scheme flips its sign on every step with an
+        amplitude comparable to the operating value (about 40 Pa at this flow)."""
+        launder = make_skimmer()
+        for _ in range(3000):
+            launder.calc_dt(1.0, 0.01, 0.02)
+        assert abs(weir_pressure_difference(launder)) > 30
+        for _ in range(600):
+            launder.calc_dt(1.0, 0.0, 0.0)
+        for _ in range(100):
+            launder.calc_dt(1.0, 0.0, 0.0)
+            assert abs(weir_pressure_difference(launder)) < 1.0
+
+    def test_first_order_convergence(self):
+        """Halving the step size should roughly halve the error against a fine solution."""
+        def state_after(max_substep, total_time=60):
+            launder = make_skimmer(max_substep=max_substep)
+            for _ in range(int(round(total_time / max_substep))):
+                launder.calc_dt(max_substep, 0.01, 0.02)
+            return numpy.array(
+                launder._levels_to_volumes(*levels(launder))
+            )
+
+        reference = state_after(0.02)
+        errors = [numpy.abs(state_after(dt) - reference).max() for dt in (2.0, 1.0, 0.5)]
+        assert errors[0] / errors[1] == pytest.approx(2, abs=0.5)
+        assert errors[1] / errors[2] == pytest.approx(2, abs=0.5)
