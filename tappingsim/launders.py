@@ -424,7 +424,9 @@ class SkimmerLaunder:
         troughs, using the Bernoulli equation for the velocity of each phase. Depending on
         the position of the slag-metal interface and the free surface relative to the top of
         the underflow channel, the channel is filled by metal, by metal and slag, or only
-        partially filled.
+        partially filled. The phase proportions in the channel are those of the trough the
+        flow comes from, which is the slag trough for a positive pressure difference
+        (slag trough minus metal trough) and the metal trough for a negative one.
 
         Parameters
         ----------
@@ -447,26 +449,28 @@ class SkimmerLaunder:
         # Assumptions and conventions:
         #  - Positive flow direction is from slag section to metal section
         #  - No deformation of slag-metal interface at weir inflow
-        # TODO: for a reversed flow (deltaP < 0) the phase proportions should come from the
-        #       metal trough side, not the slag trough side as below.
+        #  - The phase proportions in the underflow channel are those of the trough the flow
+        #    comes from
         A_w = self.weir_underflow_height * self.weir_underflow_width
         P_ss = hm_ss * self.density_metal * g + (hs_ss - hm_ss) * self.density_slag * g
         P_ms = hm_ms * self.density_metal * g + (hs_ms - hm_ms) * self.density_slag * g
         deltaP = P_ss - P_ms
         u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
         u_sw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_slag)
-        # slag-metal interface in slag trough is above weir underflow channel
-        if hm_ss > self.weir_underflow_height:
+        # levels in the trough the flow comes from
+        hm, hs = (hm_ss, hs_ss) if deltaP >= 0 else (hm_ms, hs_ms)
+        # slag-metal interface is above weir underflow channel
+        if hm > self.weir_underflow_height:
             vdot_metal_12 = A_w * u_mw
             vdot_slag_12 = 0
-        # slag-metal interface in slag trough is below weir underflow channel
-        elif hs_ss > self.weir_underflow_height:
-            vdot_metal_12 = hm_ss / self.weir_underflow_height * A_w * u_mw
-            vdot_slag_12 = (1 - hm_ss / self.weir_underflow_height) * A_w * u_sw
-        # free surface in slag trough is below weir underflow channel
+        # slag-metal interface is below weir underflow channel
+        elif hs > self.weir_underflow_height:
+            vdot_metal_12 = hm / self.weir_underflow_height * A_w * u_mw
+            vdot_slag_12 = (1 - hm / self.weir_underflow_height) * A_w * u_sw
+        # free surface is below weir underflow channel
         else:
-            vdot_metal_12 = hm_ss / self.weir_underflow_height * A_w * u_mw
-            vdot_slag_12 = ((hs_ss - hm_ss) / self.weir_underflow_height) * A_w * u_sw
+            vdot_metal_12 = hm / self.weir_underflow_height * A_w * u_mw
+            vdot_slag_12 = ((hs - hm) / self.weir_underflow_height) * A_w * u_sw
         return vdot_metal_12, vdot_slag_12
 
     def _calc_flows(self, V):
@@ -524,11 +528,8 @@ class SkimmerLaunder:
         example filling an empty launder in a single step of 10 s or more can produce
         negative volumes.
 
-        The phase volumes are not constrained to stay positive. The flow through the weir
-        underflow channel takes its phase proportions from the slag trough side whichever
-        way it flows, so a reversed flow (the metal trough pressure exceeding that of the slag
-        trough) can remove more slag from the metal trough than it holds, and the volumes
-        and levels then become unphysical.
+        The phase volumes are not constrained to stay positive, and a step that is large
+        relative to the stiffness of the flows can overshoot to negative volumes and levels.
 
         """
         V, flows = integrate(

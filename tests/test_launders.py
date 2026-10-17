@@ -518,3 +518,79 @@ class TestSkimmerLaunderEntrainment:
         slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
         assert metal_out == pytest.approx(0.01, rel=1e-3)
         assert slag_out == pytest.approx(0.02, rel=1e-3)
+
+
+class TestSkimmerLaunderWeirFlow:
+    """Flow through the weir underflow channel (height 0.3 m, width 0.3 m in the fixture)."""
+
+    area = 0.3 * 0.3
+
+    def expected_flows(self, source_hmetal, source_hslag, deltaP):
+        """Metal and slag flowrates, with the phase proportions of the channel taken from the
+        trough the flow comes from, and the sign of the pressure difference."""
+        height = 0.3
+        if source_hmetal > height:
+            metal_fraction, slag_fraction = 1.0, 0.0
+        elif source_hslag > height:
+            metal_fraction, slag_fraction = source_hmetal / height, 1 - source_hmetal / height
+        else:
+            metal_fraction = source_hmetal / height
+            slag_fraction = (source_hslag - source_hmetal) / height
+        sign = numpy.sign(deltaP)
+        return (
+            metal_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_METAL),
+            slag_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_SLAG),
+        )
+
+    @staticmethod
+    def pressure_difference(hm_ss, hs_ss, hm_ms, hs_ms):
+        def pressure(hmetal, hslag):
+            return (hmetal * RHO_METAL + (hslag - hmetal) * RHO_SLAG) * g
+
+        return pressure(hm_ss, hs_ss) - pressure(hm_ms, hs_ms)
+
+    # (hmetal, hslag) of the trough the flow comes from, with the interface above the top of
+    # the channel, below it with the slag surface above it, and with both below it
+    sources = [(0.4, 0.5), (0.2, 0.5), (0.1, 0.25)]
+    receivers = [(0.05, 0.06), (0.0, 0.0), (0.05, 0.05)]
+
+    @pytest.mark.parametrize("source", sources)
+    def test_forward_flow_takes_proportions_from_slag_trough(self, skimmer, source):
+        receiver = self.receivers[0]
+        levels = (*source, *receiver)
+        deltaP = self.pressure_difference(*levels)
+        assert deltaP > 0
+        expected = self.expected_flows(*source, deltaP)
+        assert skimmer._calc_vdot_weir(*levels) == pytest.approx(expected, rel=1e-12)
+
+    @pytest.mark.parametrize("source", sources)
+    def test_reversed_flow_takes_proportions_from_metal_trough(self, skimmer, source):
+        receiver = self.receivers[0]
+        levels = (*receiver, *source)
+        deltaP = self.pressure_difference(*levels)
+        assert deltaP < 0
+        expected = self.expected_flows(*source, deltaP)
+        assert skimmer._calc_vdot_weir(*levels) == pytest.approx(expected, rel=1e-12)
+
+    def test_flow_is_antisymmetric_when_the_troughs_are_swapped(self, skimmer):
+        """The two troughs are treated alike: swapping them reverses the flow."""
+        for source in self.sources:
+            for receiver in self.receivers:
+                forward = skimmer._calc_vdot_weir(*source, *receiver)
+                reverse = skimmer._calc_vdot_weir(*receiver, *source)
+                assert reverse == pytest.approx((-forward[0], -forward[1]), rel=1e-12, abs=1e-15)
+
+    def test_no_flow_when_pressures_are_equal(self, skimmer):
+        assert skimmer._calc_vdot_weir(0.2, 0.28, 0.2, 0.28) == (0, 0)
+
+    def test_reversed_flow_cannot_draw_slag_from_a_trough_without_slag(self, skimmer):
+        """Regression test: with the interface above the channel and no slag layer in the
+        metal trough, a reversed flow carries only metal. It used to carry slag in the
+        proportions of the slag trough, which could remove more slag than the metal trough
+        held."""
+        levels = (0.15, 0.4, 0.45, 0.45)
+        assert self.pressure_difference(*levels) < 0
+        vdot_metal, vdot_slag = skimmer._calc_vdot_weir(*levels)
+        assert vdot_metal < 0
+        assert vdot_slag == 0
+
