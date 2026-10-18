@@ -709,6 +709,39 @@ class SubmergedArcFurnace():
         return float(metalmassout), float(slagmassout)
 
 
+def _check_taphole_lists(**lists):
+    """Check that lists of tap-hole values are lists of the same length, with
+    at least one entry.
+
+    Parameters
+    ----------
+    **lists
+        The lists to check, by name.
+
+    Raises
+    ------
+    TypeError
+        If a value is not a list (or other sequence).
+    ValueError
+        If the lists do not have the same length, or are empty.
+
+    """
+    lengths = {}
+    for name, values in lists.items():
+        try:
+            lengths[name] = len(values)
+        except TypeError:
+            raise TypeError(f"{name} must be a list with an entry for each "
+                            f"tap-hole, not {values!r}") from None
+    if len(set(lengths.values())) > 1:
+        raise ValueError("the lists of tap-hole values must have the same "
+                         "length, with an entry for each tap-hole, but have "
+                         + ", ".join(f"{name}={n}"
+                                     for name, n in lengths.items()))
+    if 0 in lengths.values():
+        raise ValueError("at least one tap-hole is required")
+
+
 class DCArcFurnace():
     """DC arc furnace class. This version assumes a slag and metal
     smelting process, with an open bath and separate tap-holes for slag and
@@ -770,6 +803,8 @@ class DCArcFurnace():
     activeareafraction : float
         The fraction of the cross-sectional area of the furnace vessel 
         occupied by the molten bath.
+    ntapholes : int
+        The number of tap-holes.
     tapholediameters : list of float
         The diameter of the channel for each tap-hole, m.
     tapholelengths : list of float
@@ -820,6 +855,11 @@ class DCArcFurnace():
     ----
     This model is based on the formulation by Olsen & Reynolds. [1]_
 
+    The tap-hole parameters are lists with one entry for each tap-hole, in the
+    same order, and there must be at least one tap-hole. The open or closed
+    state of each tap-hole is the list tapholesopen_yn, with an entry for each
+    tap-hole too.
+
     The metal and slag levels are integrated in time with the classical
     fourth-order Runge-Kutta scheme (see tappingsim.components.integrators.
     rk4_step), as for the submerged-arc furnace. The outlet flowrates reported
@@ -844,6 +884,11 @@ class DCArcFurnace():
                  tapholelengths, tapholeroughnesses, tapholeheights,
                  densitymetal, densityslag, viscositymetal, 
                  viscosityslag, entrykls, fdmodels, hmetal_init, hslag_init):
+        _check_taphole_lists(
+            tapholediameters=tapholediameters, tapholelengths=tapholelengths,
+            tapholeroughnesses=tapholeroughnesses,
+            tapholeheights=tapholeheights, entrykls=entrykls,
+            fdmodels=fdmodels)
         self.furnacediameter = furnacediameter
         self.ntapholes = len(tapholediameters)
         self.activeareafraction = activeareafraction
@@ -866,6 +911,8 @@ class DCArcFurnace():
         self.tapholesopen_yn = [False for n in range(self.ntapholes)]
         self.umetals = [0 for n in range(self.ntapholes)]
         self.uslags = [0 for n in range(self.ntapholes)]
+        self.vdotmetal_outs = [0 for n in range(self.ntapholes)]
+        self.vdotslag_outs = [0 for n in range(self.ntapholes)]
         
     def _calc_vdot_out(self, hmetal, hslag, umetals0, uslags0, params):
         """Calculate volumetric outflow rates of metal and slag through each
@@ -924,7 +971,14 @@ class DCArcFurnace():
         list of _TapholeParams
             The parameters of _calc_vdot_out for each tap-hole.
 
+        Raises
+        ------
+        TypeError, ValueError
+            If tapholesopen_yn is not a list with an entry for each tap-hole.
+
         """
+        _check_taphole_lists(tapholesopen_yn=self.tapholesopen_yn,
+                             tapholediameters=self.tapholediameters)
         params = []
         for (diameter, length, height, roughness, entrykl, fdmodel,
              open_yn) in zip(self.tapholediameters, self.tapholelengths,

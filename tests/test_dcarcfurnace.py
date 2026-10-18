@@ -504,3 +504,104 @@ class TestDCTapholeTopContinuity:
             slag_levels.append(furnace.hslag)
         assert slag_levels[0] > 0.25 > slag_levels[-1]
         assert numpy.abs(numpy.diff(mass_flow, 2)).max() < 0.05  # (0.41 kg/s with the step)
+
+
+TAPHOLE_LISTS = ["tapholediameters", "tapholelengths", "tapholeroughnesses", "tapholeheights",
+                 "entrykls", "fdmodels"]
+
+
+def with_three_tapholes(dc_params):
+    """Replace the tap-holes of the fixture by three, at 0.2 m, 0.5 m and 0.8 m."""
+    dc_params.update(
+        tapholediameters=[0.1] * 3, tapholelengths=[1] * 3, tapholeroughnesses=[0.001] * 3,
+        tapholeheights=[0.2, 0.5, 0.8], entrykls=[0.25] * 3, fdmodels=[fdmodel_bellos] * 3)
+    return dc_params
+
+
+class TestDCInitialAttributes:
+    def test_flows_are_defined_before_the_first_step(self, dc_params):
+        furnace = DCArcFurnace(**dc_params)
+        assert furnace.vdotmetal_outs == [0, 0]
+        assert furnace.vdotslag_outs == [0, 0]
+
+    def test_initial_flows_are_zero_integers_like_the_velocities(self, dc_params):
+        furnace = DCArcFurnace(**dc_params)
+        for values in (furnace.vdotmetal_outs, furnace.vdotslag_outs, furnace.umetals,
+                       furnace.uslags):
+            assert all(type(value) is int and value == 0 for value in values)
+
+    def test_there_is_a_value_for_each_taphole(self, dc_params):
+        with_three_tapholes(dc_params)
+        furnace = DCArcFurnace(**dc_params)
+        assert furnace.ntapholes == 3
+        for values in (furnace.vdotmetal_outs, furnace.vdotslag_outs, furnace.umetals,
+                       furnace.uslags, furnace.tapholesopen_yn):
+            assert len(values) == 3
+
+    def test_a_furnace_with_three_tapholes_can_be_stepped(self, dc_params):
+        with_three_tapholes(dc_params)
+        furnace = make_furnace(dc_params, [True, True, True])
+        furnace.calc_dt(60.0)
+        assert len(furnace.vdotmetal_outs) == len(furnace.vdotslag_outs) == 3
+        assert furnace.vdotslag_outs[2] > 0
+
+    def test_tuples_and_arrays_are_accepted_for_the_lists(self, dc_params):
+        dc_params["tapholediameters"] = (0.1, 0.1)
+        dc_params["tapholeheights"] = numpy.array([0.2, 0.5])
+        furnace = make_furnace(dc_params, [True, True])
+        furnace.calc_dt(60.0)
+        assert furnace.vdotslag_outs[1] > 0
+
+
+class TestDCInputValidation:
+    @pytest.mark.parametrize("name", TAPHOLE_LISTS)
+    def test_lists_of_different_lengths_are_rejected(self, dc_params, name):
+        dc_params[name] = dc_params[name][:1]
+        with pytest.raises(ValueError, match=f"same length.*{name}=1"):
+            DCArcFurnace(**dc_params)
+
+    @pytest.mark.parametrize("name", TAPHOLE_LISTS)
+    def test_a_scalar_is_rejected_with_a_clear_message(self, dc_params, name):
+        dc_params[name] = 0.1
+        with pytest.raises(TypeError, match=f"{name} must be a list"):
+            DCArcFurnace(**dc_params)
+
+    def test_at_least_one_taphole_is_required(self, dc_params):
+        for name in TAPHOLE_LISTS:
+            dc_params[name] = []
+        with pytest.raises(ValueError, match="at least one tap-hole"):
+            DCArcFurnace(**dc_params)
+
+    def test_a_furnace_with_one_taphole_is_accepted(self, dc_params):
+        for name in TAPHOLE_LISTS:
+            dc_params[name] = dc_params[name][:1]
+        furnace = make_furnace(dc_params, [True])
+        furnace.calc_dt(60.0)
+        assert furnace.ntapholes == 1 and len(furnace.vdotmetal_outs) == 1
+
+    def test_open_states_of_the_wrong_length_are_rejected_at_the_step(self, dc_params):
+        furnace = make_furnace(dc_params, [True])
+        with pytest.raises(ValueError, match="tapholesopen_yn=1"):
+            furnace.calc_dt(60.0)
+        furnace.tapholesopen_yn = [True, True, True]
+        with pytest.raises(ValueError, match="tapholesopen_yn=3"):
+            furnace.calc_time_period(numpy.linspace(0, 60, 5))
+
+    def test_a_scalar_open_state_is_rejected_at_the_step(self, dc_params):
+        furnace = make_furnace(dc_params)
+        furnace.tapholesopen_yn = True
+        with pytest.raises(TypeError, match="tapholesopen_yn must be a list"):
+            furnace.calc_dt(60.0)
+
+    def test_the_state_is_unchanged_by_a_rejected_step(self, dc_params):
+        furnace = make_furnace(dc_params, [True])
+        with pytest.raises(ValueError):
+            furnace.calc_dt(60.0)
+        assert (furnace.hmetal, furnace.hslag) == (HMETAL_INIT, HSLAG_INIT)
+        assert furnace.vdotmetal_outs == [0, 0]
+
+    def test_changing_open_states_in_place_is_checked_too(self, dc_params):
+        furnace = make_furnace(dc_params, [True, True])
+        furnace.tapholesopen_yn.pop()
+        with pytest.raises(ValueError, match="tapholesopen_yn=1"):
+            furnace.calc_dt(60.0)
