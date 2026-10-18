@@ -1,3 +1,24 @@
-build
-*.egg-info
-.ipynb_checkpoints
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Tools
+.pytest_cache/
+.ruff_cache/
+.claude/
+
+# Documentation build output
+docs/_build/

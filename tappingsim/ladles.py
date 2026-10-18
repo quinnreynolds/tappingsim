@@ -1,175 +1,192 @@
 """Classes to create ladle objects.
 
 Molten products tapped from metallurgical furnaces are often stored in ladles,
-large refractory-lined containers which can then be transported on to secondary 
-processing steps or product separation. Multiple ladles may be connected in a 
-strand during tapping, to prevent spillage and to assist with separation of 
+large refractory-lined containers which can then be transported on to secondary
+processing steps or product separation. Multiple ladles may be connected in a
+strand during tapping, to prevent spillage and to assist with separation of
 product and waste phases.
-
-This module also includes support functions for describing phase entrainment 
-effects in the ladle outflow.
 
 """
 
 import numpy
 from scipy.constants import pi
 
-def overflowmodel_step(interfacedeltah, *consts):
-    """Function to calculate metal volume fraction entrained in slag outflow 
-    stream as a function of the location of the slag-metal interface.
-    
-    Parameters
-    ----------
-    interfacedeltah : float
-        Not used in this overflow model.
-    consts : list of float
-        Not used in this overflow model.
-        
-    Returns
-    -------
-    float
-        Metal volume fraction in slag outlet stream.
-        
-    Note
-    ----
-    This model describes perfectly separated phase model with no metal 
-    entrainment into the slag phase.
-
-    Fraction = 0
-    
-    """
-    return 0
-
-def overflowmodel_exp(interfacedeltah, *consts):
-    r"""Function to calculate metal volume fraction entrained in slag outflow 
-    stream as a function of the location of the slag-metal interface.
-    
-    Parameters
-    ----------
-    interfacedeltah : float
-        The distance of the slag-metal interface from the ladle outlet, ladle 
-        depth minus interface position, in m.
-    consts : list of float
-        The exponential pre-multiplier and exponential factor, dimensionless 
-        and 1/m respectively.
-
-    Returns
-    -------
-    float
-        Metal volume fraction in slag outlet stream.
-
-    Note
-    ----
-    This model describes an exponential decay of metal entrainment as a 
-    function of the position of the interface relative to the outlet. [1]_
-    
-    Fraction = consts[0]*exp(-consts[1]*interfacedeltah) if interfacedeltah > 0
-             = consts[0]                                 if interfacedeltah < 0
-    
-    References
-    ----------
-    .. [1] Q.G. Reynolds, J.E. Olsen, J.D. Steenkamp, Variability in Ferroalloy 
-       Furnace Tapping - Insights from Modelling. Proceedings of the 16th 
-       International Ferro-Alloys Congress (INFACON XVI) 2021, Available at 
-       SSRN: doi:10.2139/ssrn.3926222 or https://ssrn.com/abstract=3926222.
-       
-    """
-    if interfacedeltah > 0:
-        return consts[0]*numpy.exp(-consts[1]*interfacedeltah)
-    else:
-        return consts[0]
+from tappingsim.components.integrators import integrate
+from tappingsim.components.outlets import Outlet
 
 
 class CylindricalLadle():
-    """Tapping ladle class. This version is a cylindrical ladle with an 
-    choice of empirical overflow models.
-    
+    """Tapping ladle class. This version is a cylindrical ladle with an
+    open-channel overflow outlet and a choice of empirical overflow models.
+
+    Metal and slag overflow the ladle as open-channel flow over a
+    broad-crested weir outlet with its crest at the ladle depth (see
+    tappingsim.components.outlets.Outlet). The levels rise above the depth
+    until the flowrate over the outlet matches the inflow. The metal entrained
+    in the slag flowing over the outlet is described by the chosen overflow
+    model.
+
     Parameters
     ----------
     diameter : float
         The internal diameter of the ladle, m.
     depth : float
-        The internal depth of the ladle, m.
+        The internal depth of the ladle, m. This is the height of the overflow
+        outlet crest.
     hmetal_init : float
         The initial level of metal in the ladle, m.
     hslag_init : float
         The initial level of slag in the ladle, m.
     overflowmodel : function
-        Function to be used to model the phase overflow behaviour.
-    overflowconsts : list of float
-        Empirical parameters for the chosen overflow model.
-            
+        Function to be used to model the entrainment of metal in the slag
+        overflow, taking the distance of the slag-metal interface below the
+        crest, in m, and returning the metal volume fraction in the slag
+        stream (see tappingsim.components.outlets).
+    outlet_width : float
+        The width of the overflow outlet, m.
+    outlet_slag_Cd : float
+        Discharge coefficient for the slag phase over the outlet,
+        dimensionless.
+    outlet_metal_Cd : float
+        Discharge coefficient for the metal phase over the outlet,
+        dimensionless.
+    density_metal : float
+        The density of the metal phase, kg/m3.
+    density_slag : float
+        The density of the slag phase, kg/m3.
+    max_substep : float, optional
+        The longest internal time step used by calc_dt, in s. Longer time
+        steps are divided into equal sub-steps no longer than this. The
+        default is 1 s.
+
     Attributes
     ----------
     diameter : float
         The internal diameter of the ladle, m.
-    depth : float
-        The internal depth of the ladle, m.
     hmetal : float
         The current level of metal in the ladle, m.
     hslag : float
         The current level of slag in the ladle, m.
-    overflowmodel : function
-        Reference to internal lambda function created for overflow modelling.
+    outlet : tappingsim.components.outlets.Outlet
+        The overflow outlet, with its width, discharge coefficients, phase
+        densities and overflow model.
+    max_substep : float
+        The longest internal time step used by calc_dt, in s.
     vdotmetal_out : float
         The current outlet volume flowrate of metal from the unit, m3/s.
     vdotslag_out : float
         The current outlet volume flowrate of slag from the unit, m3/s.
-        
+
+    Note
+    ----
+    The state is integrated in time with a linearly-implicit (Rosenbrock-Euler)
+    scheme (see tappingsim.components.integrators), as used by the skimmer
+    launder. It is first order in time and stable for any time step, as the
+    flowrate over the outlet becomes stiffer for large heads. The outlet
+    flowrates reported after calc_dt are the effective flowrates averaged over
+    the time step, so that the change in the volumes held in the ladle is
+    exactly the volume added by the inflows less the volume leaving over the
+    outlet. If a step would produce negative phase volumes, which can happen
+    for very wide outlets relative to the time step, it is repeated as smaller
+    steps. The ladle walls are assumed to be high enough that the contents do
+    not spill elsewhere.
+
     """
-    
+
+    # Mass balance coefficients linking the flows over the outlet to the rates
+    # of change of the metal and slag volumes.
+    _FLOWS_TO_VOLUME_RATES = -numpy.eye(2)
+
     def __init__(self, diameter, depth, hmetal_init, hslag_init,
-                 overflowmodel, overflowconsts):
+                 overflowmodel, outlet_width, outlet_slag_Cd, outlet_metal_Cd,
+                 density_metal, density_slag, max_substep=1.0):
+        if outlet_width <= 0:
+            raise ValueError("outlet_width must be positive")
+        if max_substep <= 0:
+            raise ValueError("max_substep must be positive")
         self.diameter = diameter
-        self.depth = depth
         self.hmetal = hmetal_init
         self.hslag = hslag_init
-        self.overflowmodel = lambda dh: overflowmodel(dh, *overflowconsts)
-        self.diameter = self.diameter
-        
-    def _calc_vdot_out(self, dt):
+        self.outlet = Outlet(depth, outlet_width, outlet_slag_Cd,
+                             outlet_metal_Cd, density_metal, density_slag,
+                             overflowmodel)
+        self.max_substep = max_substep
+        self.vdotmetal_out = 0
+        self.vdotslag_out = 0
+
+    @property
+    def depth(self):
+        """The internal depth of the ladle, m, which is the height of the
+        overflow outlet crest. This is the depth given when the ladle was
+        created, and it cannot be changed."""
+        return self.outlet.crest_height
+
+    def _calc_flows(self, V):
+        """Calculate the open-channel flowrates of metal and slag over the
+        outlet for given phase volumes.
+
+        Parameters
+        ----------
+        V : array_like of float
+            Volumes of metal and slag in the ladle, m3.
+
+        Returns
+        -------
+        numpy.ndarray
+            Volumetric flowrates of metal and slag over the outlet, m3/s.
+
+        """
         xarea = 0.25 * pi * self.diameter**2
-        if self.hslag < self.depth:
-            self.vdotmetal_out = 0
-            self.vdotslag_out = 0
-        else:
-            vfrac = self.overflowmodel(self.depth - self.hmetal)
-            if self.hmetal < self.depth:
-                vslagout = (self.hslag-self.depth) * xarea
-                self.vdotmetal_out = vslagout * vfrac / dt
-                self.vdotslag_out = vslagout * (1-vfrac) / dt
-            else:
-                vslagout = (self.hslag-self.hmetal) * xarea
-                self.vdotmetal_out = ((self.hmetal-self.depth) * xarea
-                                      + vslagout * vfrac) / dt
-                self.vdotslag_out = vslagout * (1-vfrac) / dt
-    
+        hmetal = V[0] / xarea
+        hslag = hmetal + V[1] / xarea
+        return numpy.array(self.outlet.flowrates(hmetal, hslag))
+
     def calc_dt(self, dt, vdotmetal_in, vdotslag_in):
         """
-        Integrate object state forward over a single time step, and update 
+        Integrate object state forward over a single time step, and update
         output flowrates.
+
+        The time step is divided into equal sub-steps no longer than
+        max_substep, each integrated with a linearly-implicit scheme (see
+        tappingsim.components.integrators.integrate). The inflow rates are
+        held constant over the time step. The outlet flowrates are set to the
+        average of the flowrates over the sub-steps. A ladle that stays below
+        the crest over the whole time step is filled exactly in a single step.
 
         Parameters
         ----------
         dt : float
             Length of time step, in s.
         vdotmetal_in : float
-            Flowrate of metal into the ladle, kg/s.
+            Flowrate of metal into the ladle, m3/s.
         vdotslag_in : float
-            Flowrate of slag into the ladle, kg/s.
+            Flowrate of slag into the ladle, m3/s.
 
         Returns
         -------
         None.
-        
+
         """
         xarea = 0.25 * pi * self.diameter**2
-        dhmetal = dt*vdotmetal_in / xarea
-        dhslag = dt*vdotslag_in / xarea
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
-        self._calc_vdot_out(dt)
-        dhmetal = -dt*self.vdotmetal_out / xarea
-        dhslag = -dt*self.vdotslag_out / xarea
-        self.hmetal += dhmetal
-        self.hslag += dhmetal + dhslag
+        dhslag_noflow = dt * (vdotmetal_in + vdotslag_in) / xarea
+        if (self.hslag <= self.depth
+                and self.hslag + dhslag_noflow <= self.depth):
+            # the levels only rise and stay below the crest: there is no
+            # outflow over the time step, and the filling is exact
+            self.hmetal += dt * vdotmetal_in / xarea
+            self.hslag += dhslag_noflow
+            self.vdotmetal_out = 0
+            self.vdotslag_out = 0
+            return
+        V, flows = integrate(
+            self._calc_flows,
+            numpy.array([xarea * self.hmetal,
+                         xarea * (self.hslag - self.hmetal)]),
+            numpy.array([vdotmetal_in, vdotslag_in]),
+            self._FLOWS_TO_VOLUME_RATES,
+            dt,
+            self.max_substep,
+        )
+        self.hmetal = V[0] / xarea
+        self.hslag = self.hmetal + V[1] / xarea
+        self.vdotmetal_out, self.vdotslag_out = flows
