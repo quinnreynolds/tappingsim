@@ -871,9 +871,10 @@ class DCArcFurnace():
         """Calculate volumetric outflow rates of metal and slag through each
         tap-hole for the given furnace state.
 
-        Solves for the phase velocities in each open tap-hole, accounting for
-        the entrance and friction losses and interface deformation effects.
-        There is no flow through a closed tap-hole.
+        Each tap-hole is calculated independently, with the same model as the
+        tap-hole of a submerged-arc furnace (see the module function
+        _calc_vdot_out), but with no burden in front of it. There is no flow
+        through a closed tap-hole.
 
         Parameters
         ----------
@@ -902,63 +903,12 @@ class DCArcFurnace():
         """
         umetals, uslags, vdotmetal_outs, vdotslag_outs = [], [], [], []
         for p, umetal0, uslag0 in zip(params, umetals0, uslags0):
-            umetal, uslag, area_m, area_s = 0, 0, 0, 0
-            if p.tapholeopen_yn:
-                rt = 0.5 * p.tapholediameter
-                tapholeheight = p.tapholeheight
-                densitymetal, densityslag = p.densitymetal, p.densityslag
-                allownegativeheights_yn = p.allownegativeheights_yn
-
-                # Tapping pressure calculation (applied to both phases, based on 
-                # undeformed interfaces). Integrated pressure field in z, averaged 
-                # with total height in taphole.
-                hs = hslag - tapholeheight
-                hm = hmetal - tapholeheight
-                if hs < -rt:
-                    # liquid level below taphole - no flow
-                    pa = 0
-                elif hs < rt:
-                    # liquid level between taphole limits
-                    if hm < -rt:
-                        # slag only
-                        pa = 0.5*g*(hs+rt)*densityslag
-                    else:
-                        # slag and metal
-                        pa = 0.5*g*((densitymetal*(hm+rt)*(hm+rt)
-                                    + densityslag*(hs*(hs+2*rt) 
-                                                    - hm*(hm+2*rt))) / (hs+rt))
-                else:
-                    # liquid level above taphole
-                    if hm < -rt:
-                        # slag only
-                        pa = hs * densityslag * g
-                    elif hm < rt:
-                        # slag and metal
-                        pa = 0.25*g*((densitymetal*(hm+rt)*(hm+rt)
-                                    + densityslag*(rt*(4*hs-rt) 
-                                                    - hm*(hm+2*rt))) / rt)
-                    else:
-                        # metal only
-                        pa = g * (densityslag*(hs-hm) + densitymetal*hm)
-                
-                # calculate phase velocities
-                umetal, uslag = _solve_velocities(pa, umetal0, uslag0, p)
-
-                # interface deformation and the areas of the tap-hole occupied by
-                # each phase
-                h0_l, h0_h = _interface_levels(umetal, uslag, p)
-                area_m, area_s = _phase_areas(hm, hs, h0_l, h0_h, rt)
-                if not allownegativeheights_yn:
-                    if hslag <= 0:
-                        uslag = 0
-                    if hmetal <= 0:
-                        umetal = 0
-
+            umetal, uslag, vdotmetal_out, vdotslag_out = _calc_vdot_out(
+                hmetal, hslag, umetal0, uslag0, p)
             umetals.append(umetal)
             uslags.append(uslag)
-            vdotmetal_outs.append(area_m * umetal)
-            vdotslag_outs.append(area_s * uslag)
-            
+            vdotmetal_outs.append(vdotmetal_out)
+            vdotslag_outs.append(vdotslag_out)
         return umetals, uslags, vdotmetal_outs, vdotslag_outs
 
     def _calc_params(self):

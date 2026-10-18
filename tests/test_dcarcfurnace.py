@@ -344,6 +344,35 @@ class TestDCFlowCalculation:
             assert (umetals[i], uslags[i], vdotmetals[i], vdotslags[i]) == tuple(
                 values[0] for values in expected)
 
+    # (metal level, slag level) in the regimes of the first tap-hole (at 0.2 m, radius 0.05 m)
+    # and the second one (at 0.5 m): completely filled with both phases, completely filled with
+    # slag only, partly filled with slag only, partly filled with metal in it, and with the
+    # slag surface below the tap-hole.
+    regimes = [(0.22, 0.8), (0.3, 0.9), (0.1, 0.52), (0.21, 0.23), (0.19, 0.24), (0.05, 0.1)]
+
+    @pytest.mark.parametrize("levels", regimes)
+    def test_each_taphole_matches_the_shared_calculation(self, dc_params, levels):
+        """The flows of each tap-hole are those of the calculation that the submerged-arc
+        furnace uses for its tap-hole, with the snapshot of the parameters of that tap-hole."""
+        furnace = make_furnace(dc_params, [True, True])
+        params = furnace._calc_params()
+        umetals, uslags, vdotmetals, vdotslags = furnace._calc_vdot_out(
+            *levels, [0.5, 0.5], [0.5, 0.5], params)
+        for i in (0, 1):
+            expected = furnaces._calc_vdot_out(*levels, 0.5, 0.5, params[i])
+            assert (umetals[i], uslags[i], vdotmetals[i], vdotslags[i]) == expected
+
+    def test_no_metal_below_the_hearth_unless_allowed(self, dc_params):
+        dc_params["tapholeheights"] = [0.0, 0.5]
+        furnace = make_furnace(dc_params, [True, False])
+        umetals, _, vdotmetals, _ = furnace._calc_vdot_out(
+            -0.02, 0.3, [0.5, 0.5], [0.5, 0.5], furnace._calc_params())
+        assert umetals[0] == 0 and vdotmetals[0] == 0
+        furnace.allownegativeheights_yn = True
+        umetals, _, vdotmetals, _ = furnace._calc_vdot_out(
+            -0.02, 0.3, [0.5, 0.5], [0.5, 0.5], furnace._calc_params())
+        assert umetals[0] > 0 and vdotmetals[0] > 0
+
     def test_closed_taphole_has_no_velocity_or_flow(self, dc_params):
         furnace = make_furnace(dc_params, [False, True])
         umetals, uslags, vdotmetals, vdotslags = furnace._calc_vdot_out(
