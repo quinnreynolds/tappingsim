@@ -21,10 +21,10 @@ class CylindricalLadle():
 
     Metal and slag overflow the ladle as open-channel flow over a
     broad-crested weir outlet with its crest at the ladle depth (see
-    tappingsim.components.outlets.Outlet). The levels rise above the depth until the
-    flowrate
-    over the outlet matches the inflow. The metal entrained in the slag
-    flowing over the outlet is described by the chosen overflow model.
+    tappingsim.components.outlets.Outlet). The levels rise above the depth
+    until the flowrate over the outlet matches the inflow. The metal entrained
+    in the slag flowing over the outlet is described by the chosen overflow
+    model.
 
     Parameters
     ----------
@@ -63,9 +63,6 @@ class CylindricalLadle():
     ----------
     diameter : float
         The internal diameter of the ladle, m.
-    depth : float
-        The internal depth of the ladle, m. This is the height of the
-        overflow outlet crest.
     hmetal : float
         The current level of metal in the ladle, m.
     hslag : float
@@ -83,15 +80,16 @@ class CylindricalLadle():
     Note
     ----
     The state is integrated in time with a linearly-implicit (Rosenbrock-Euler)
-    scheme (see tappingsim.components.integrators), as used by the skimmer launder. It is
-    first order in time and stable for any time step, as the flowrate over the
-    outlet becomes stiffer for large heads. The outlet flowrates reported after
-    calc_dt are the effective flowrates averaged over the time step, so that
-    the change in the volumes held in the ladle is exactly the volume added by
-    the inflows less the volume leaving over the outlet. If a step would
-    produce negative phase volumes, which can happen for very wide outlets
-    relative to the time step, it is repeated as smaller steps. The ladle walls
-    are assumed to be high enough that the contents do not spill elsewhere.
+    scheme (see tappingsim.components.integrators), as used by the skimmer
+    launder. It is first order in time and stable for any time step, as the
+    flowrate over the outlet becomes stiffer for large heads. The outlet
+    flowrates reported after calc_dt are the effective flowrates averaged over
+    the time step, so that the change in the volumes held in the ladle is
+    exactly the volume added by the inflows less the volume leaving over the
+    outlet. If a step would produce negative phase volumes, which can happen
+    for very wide outlets relative to the time step, it is repeated as smaller
+    steps. The ladle walls are assumed to be high enough that the contents do
+    not spill elsewhere.
 
     """
 
@@ -119,7 +117,8 @@ class CylindricalLadle():
     @property
     def depth(self):
         """The internal depth of the ladle, m, which is the height of the
-        overflow outlet crest."""
+        overflow outlet crest. This is the depth given when the ladle was
+        created, and it cannot be changed."""
         return self.outlet.crest_height
 
     def _calc_flows(self, V):
@@ -149,10 +148,10 @@ class CylindricalLadle():
 
         The time step is divided into equal sub-steps no longer than
         max_substep, each integrated with a linearly-implicit scheme (see
-        tappingsim.components.integrators.integrate). The inflow rates are held constant
-        over the time step. The outlet flowrates are set to the average of the
-        flowrates over the sub-steps. A ladle that stays below the crest over
-        the whole time step is filled exactly in a single step.
+        tappingsim.components.integrators.integrate). The inflow rates are
+        held constant over the time step. The outlet flowrates are set to the
+        average of the flowrates over the sub-steps. A ladle that stays below
+        the crest over the whole time step is filled exactly in a single step.
 
         Parameters
         ----------

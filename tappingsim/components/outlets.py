@@ -16,7 +16,7 @@ example::
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy
@@ -44,9 +44,9 @@ def overflowmodel_step(interfacedeltah):
     Note
     ----
     This model describes perfectly separated phase model with no metal
-    entrainment into the slag phase.
+    entrainment into the slag phase::
 
-    Fraction = 0
+        Fraction = 0
 
     """
     return 0
@@ -76,9 +76,11 @@ def overflowmodel_exp(interfacedeltah, premultiplier, decay):
     ----
     This model describes an exponential decay of metal entrainment as a
     function of the position of the interface relative to the outlet. [1]_
+    The metal volume fraction is::
 
-    Fraction = premultiplier*exp(-decay*interfacedeltah) if interfacedeltah > 0
-             = premultiplier                             if interfacedeltah < 0
+        Fraction = premultiplier*exp(-decay*interfacedeltah)
+                                          for interfacedeltah > 0
+        Fraction = premultiplier          for interfacedeltah <= 0
 
     References
     ----------
@@ -129,7 +131,8 @@ class Outlet:
     metal_Cd: float
     density_metal: float
     density_slag: float
-    overflowmodel: Callable[[float], float] = overflowmodel_step
+    overflowmodel: Callable[[float], float] = field(
+        default_factory=lambda: overflowmodel_step)
 
     def flowrates(self, hmetal, hslag):
         """Calculate the open-channel flowrates of metal and slag over the

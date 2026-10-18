@@ -499,10 +499,10 @@ class SkimmerLaunder:
 
         The time step is divided into equal sub-steps no longer than max_substep, each
         integrated with a linearly-implicit (Rosenbrock-Euler) scheme (see
-        tappingsim.components.integrators.integrate). The inflow rates are held constant over the time
-        step. The outlet flowrates are set to the average of the flowrates over the
-        sub-steps, so that the change in the volumes held in the troughs is exactly the
-        volume added by the inflows less the volume leaving by the outlets.
+        tappingsim.components.integrators.integrate). The inflow rates are held constant
+        over the time step. The outlet flowrates are set to the average of the flowrates
+        over the sub-steps, so that the change in the volumes held in the troughs is
+        exactly the volume added by the inflows less the volume leaving by the outlets.
 
         Parameters
         ----------
