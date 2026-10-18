@@ -531,6 +531,17 @@ def _phase_areas(hm, hs, h0_l, h0_h, rt):
     area_s : float
         Area of the tap-hole occupied by slag, m2.
 
+    Note
+    ----
+    The chord height of the slag-metal interface in the tap-hole is a linear
+    function of the metal level, from -rt (only slag enters the tap-hole) at
+    h0_l to the top of the liquid in the tap-hole (only metal enters) at the
+    metal level h0_h for a completely filled tap-hole. For a partly filled
+    tap-hole that level is hs + (h0_h - rt)*(hs + rt)/(2*rt), which reduces to
+    hs when there is no deformation of the interface (h0_h = rt), and to h0_h
+    when the tap-hole is full, so that the areas, and with them the flows, are
+    continuous as the slag level passes the top of the tap-hole.
+
     """
     if hs < -rt:
         # slag below taphole - no flow
@@ -540,8 +551,13 @@ def _phase_areas(hm, hs, h0_l, h0_h, rt):
         if hm < h0_l:
             # slag only
             return 0, _segment_area(rt, hs)
-        # slag and metal
-        hi = hs - (hs - hm) * (hs + rt) / (hs - h0_l)
+        # slag and metal. The interface rises linearly with the metal level
+        # from the bottom of the tap-hole at h0_l to the free surface at the
+        # metal level h_top. This moves from hs for a nearly empty tap-hole,
+        # where there is no deformation, to h0_h for a full one, so that the
+        # interface joins the one below for a completely filled tap-hole.
+        h_top = hs + (h0_h - rt) * (hs + rt) / (2 * rt)
+        hi = -rt + (hs + rt) * (hm - h0_l) / (h_top - h0_l)
         area_m = _segment_area(rt, hi)
         return area_m, _segment_area(rt, hs) - area_m
     # taphole completely filled

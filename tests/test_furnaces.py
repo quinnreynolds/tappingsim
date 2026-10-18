@@ -612,3 +612,116 @@ class TestTapholeParameters:
         furnace = SubmergedArcFurnace(**params)
         furnace.calc_dt(60.0)
         assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# Continuity as the slag level passes the top of the tap-hole
+# ---------------------------------------------------------------------------
+
+class TestTapholeTopContinuity:
+    """The flows must not jump when the slag surface falls through the top of the tap-hole,
+    where the tap-hole changes from completely to partly filled. The interface between the
+    phases was previously positioned with different formulas either side of that level, which
+    gave a step of several per cent in the metal flow and of up to tens of per cent in the
+    slag flow."""
+
+    h0_l, h0_h = -RT - 0.012, RT + 0.012
+    full = math.pi * RT**2
+
+    @pytest.mark.parametrize("hm", [-0.058, -0.04, -0.02, 0.0, 0.02, 0.04, 0.049])
+    def test_phase_areas_are_continuous(self, hm):
+        eps = 1e-12
+        below = furnaces._phase_areas(hm, RT - eps, self.h0_l, self.h0_h, RT)
+        above = furnaces._phase_areas(hm, RT + eps, self.h0_l, self.h0_h, RT)
+        assert below == pytest.approx(above, abs=1e-9 * self.full)
+
+    @pytest.mark.parametrize("hm_rel", [-0.04, -0.02, 0.0, 0.02, 0.04])
+    def test_flows_are_continuous(self, furnace_params, hm_rel):
+        furnace = open_furnace(furnace_params)
+        params, height = furnace._calc_params(), furnace.tapholeheight
+        rt = 0.5 * furnace.tapholediameter
+        eps = 1e-9
+        below = furnaces._calc_vdot_out(height + hm_rel, height + rt - eps, 1.0, 1.0, params)
+        above = furnaces._calc_vdot_out(height + hm_rel, height + rt + eps, 1.0, 1.0, params)
+        assert below[2:] == pytest.approx(above[2:], rel=1e-5)
+
+    def test_flows_have_no_step_over_a_sweep_of_the_slag_level(self, furnace_params):
+        furnace = open_furnace(furnace_params)
+        params, height = furnace._calc_params(), furnace.tapholeheight
+        rt = 0.5 * furnace.tapholediameter
+        for hm_rel in (-0.03, 0.0, 0.03, 0.045):
+            levels = numpy.linspace(rt + 0.02, rt - 0.02, 4001)
+            flows = numpy.array([
+                furnaces._calc_vdot_out(height + hm_rel, height + hs, 1.0, 1.0, params)[2:]
+                for hs in levels])
+            steps = numpy.abs(numpy.diff(flows, axis=0)).sum(axis=1)
+            assert steps.max() < 3 * numpy.median(steps)
+
+    def test_no_jump_in_the_flows_during_a_tap_through_the_top_of_the_taphole(self):
+        """A shallow bath with a large tap-hole and no smelting: the slag level falls through
+        the top of the tap-hole about 80 s into the tap."""
+        params = dict(
+            powerMVA=0, powerfactor=0.833333, metalSER=3.5, slagmetalmassratio=1.05,
+            furnacediameter=11.4, activeareafraction=0.75, tapholediameter=0.2,
+            tapholelength=1.25, tapholeroughness=0.001, tapholeheight=0.45,
+            densitymetal=6600, densityslag=2780, viscositymetal=0.005, viscosityslag=0.1,
+            particlediameter=0.012, particlesphericity=0.8, bedporosity=0.5, bedmindiameter=0.2,
+            bedmaxdiameter=100, bedmodel=bedmodel_ergun, entrykl=0.25, fdmodel=fdmodel_cheng,
+            hmetal_init=0.5, hslag_init=0.57,
+        )
+        furnace = open_furnace(params)
+        times = numpy.linspace(0, 1200, 501)
+        mass_flow, slag_levels = [], []
+        for dt in numpy.diff(times):
+            furnace.calc_dt(float(dt))
+            mass_flow.append(furnace.vdotmetal_out * furnace.densitymetal
+                             + furnace.vdotslag_out * furnace.densityslag)
+            slag_levels.append(furnace.hslag - furnace.tapholeheight)
+        assert slag_levels[0] > 0.1 > slag_levels[-1]  # the slag level passes the top of the hole
+        second_differences = numpy.abs(numpy.diff(mass_flow, 2))[20:]
+        assert second_differences.max() < 0.2  # (a step of 1.9 kg/s gave 1.2 before)
+
+
+class TestFloodedTapholeUnchanged:
+    """Pinned values for a completely filled tap-hole, which the continuity change must not
+    alter."""
+
+    h0_l, h0_h = -RT - 0.01, RT + 0.01
+
+    @pytest.mark.parametrize("hm, hs, expected", [
+        (0.0, 0.3, (0.003926990816987242, 0.003926990816987242)),
+        (0.02, 0.06, (0.005562257291940933, 0.00229172434203355)),
+        (-0.05, 0.1, (0.0003126080286583633, 0.00754137360531612)),
+        (0.04, 0.2, (0.006993569945054542, 0.0008604116889199412)),
+        (-0.058, 0.07, (2.8544891992804208e-05, 0.007825436741981679)),
+        (0.055, 0.5, (0.00774200758157903, 0.00011197405239545336)),
+    ])
+    def test_areas(self, hm, hs, expected):
+        assert furnaces._phase_areas(hm, hs, self.h0_l, self.h0_h, RT) == expected
+
+
+class TestPartlyFilledInterface:
+    h0_l, h0_h = -RT - 0.012, RT + 0.012
+
+    def test_reduces_to_the_undeformed_interface_without_deformation(self):
+        """With no deformation (h0_h = rt) the interface is the line from the bottom of the
+        tap-hole at h0_l to the free surface at the metal level hs."""
+        h0_l = -RT - 0.02
+        for hs, hm in ((0.03, -0.01), (0.0, -0.04), (-0.03, -0.045), (0.04, 0.04)):
+            area_m, area_s = furnaces._phase_areas(hm, hs, h0_l, RT, RT)
+            hi = hs - (hs - hm) * (hs + RT) / (hs - h0_l)
+            assert area_m == pytest.approx(furnaces._segment_area(RT, hi), abs=1e-15)
+            assert area_s == pytest.approx(furnaces._segment_area(RT, hs) - area_m, abs=1e-15)
+
+    def test_metal_area_increases_with_the_metal_level(self):
+        for hs in (-0.03, 0.0, 0.03, 0.049):
+            levels = numpy.linspace(self.h0_l, hs, 80)
+            values = [furnaces._phase_areas(hm, hs, self.h0_l, self.h0_h, RT)[0] for hm in levels]
+            assert values[0] == pytest.approx(0, abs=1e-15)
+            assert numpy.all(numpy.diff(values) > 0)
+
+    def test_slag_remains_in_the_hole_while_the_metal_stays_below_the_free_surface(self):
+        for hs in (-0.03, 0.0, 0.03, 0.049):
+            area_m, area_s = furnaces._phase_areas(hs, hs, self.h0_l, self.h0_h, RT)
+            assert area_s > 0
+            assert area_m + area_s == pytest.approx(furnaces._segment_area(RT, hs))
