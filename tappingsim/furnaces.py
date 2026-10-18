@@ -944,46 +944,10 @@ class DCArcFurnace():
                 # calculate phase velocities
                 umetal, uslag = _solve_velocities(pa, umetal0, uslag0, p)
 
-                # interface deformations
-                h0_l = (-rt - densityslag*uslag*uslag 
-                        / (8*g*(densitymetal-densityslag)))
-                h0_h = (rt + densitymetal*umetal*umetal 
-                        / (8*g*(densitymetal-densityslag)))
-                
-                if hs < -rt:
-                    # slag below taphole - no flow
-                    area_m = 0
-                    area_s = 0
-                elif hs < rt:
-                    # taphole partially filled
-                    if hm < h0_l:
-                        # slag only
-                        theta = 2 * math.acos(-hs/rt)
-                        area_m = 0
-                        area_s = 0.5 * rt*rt * (theta - math.sin(theta))
-                    else:
-                        # slag and metal
-                        hi = hs - (hs-hm) * (hs+rt) / (hs-h0_l)
-                        theta = 2*math.acos(-hi/rt)
-                        area_m = 0.5 * rt*rt * (theta - math.sin(theta))
-                        theta = 2*math.acos(-hs/rt)
-                        area_s = 0.5 * rt*rt * (theta - math.sin(theta)) - area_m
-                else:
-                    # taphole completely filled
-                    if hm < h0_l:
-                        # slag only
-                        area_m = 0
-                        area_s = pi * rt*rt
-                    elif hm > h0_h:
-                        # metal only
-                        area_m = pi * rt*rt
-                        area_s = 0
-                    else:
-                        # slag and metal
-                        hi = rt * (1 - 2 * (h0_h-hm) / (h0_h-h0_l))
-                        theta = 2 * math.acos(-hi/rt)
-                        area_m = 0.5 * rt*rt * (theta - math.sin(theta))
-                        area_s = pi * rt*rt - area_m                
+                # interface deformation and the areas of the tap-hole occupied by
+                # each phase
+                h0_l, h0_h = _interface_levels(umetal, uslag, p)
+                area_m, area_s = _phase_areas(hm, hs, h0_l, h0_h, rt)
                 if not allownegativeheights_yn:
                     if hslag <= 0:
                         uslag = 0

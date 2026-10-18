@@ -380,3 +380,98 @@ class TestDCVelocitySolver:
         furnace = make_furnace(dc_params, [False, False])
         furnace.calc_dt(60.0)
         assert furnace.vdotmetal_outs == [0, 0]
+
+
+class TestDCPartlyFilledTapholes:
+    # open states, (metal level, slag level), and the metal velocities, slag velocities, metal
+    # flows and slag flows from the two tap-holes. The slag surface is below the top of an open
+    # tap-hole and there is no metal in it. These pinned values were calculated before the
+    # interface and area calculations were replaced by the shared ones, which must not change
+    # them.
+    pinned = [
+        ([False, True], (0.3, 0.52), ([0, 0.42818215700404955], [0, 0.6583848055272],
+                                      [0, 0.0], [0, 0.003866231823569957])),
+        ([False, True], (0.3, 0.505), ([0, 0.3797742935948482], [0, 0.576468625139181],
+                                       [0, 0.0], [0, 0.0025515401960795815])),
+        ([True, False], (0.05, 0.22), ([0.4434306520893389, 0], [0.6584046781471846, 0],
+                                       [0.0, 0], [0.003866348521517959, 0])),
+        ([True, False], (0.0, 0.2), ([0, 0], [0.5464208098727793, 0],
+                                     [0, 0], [0.002145789502581136, 0])),
+    ]
+
+    @pytest.mark.parametrize("states, levels, expected", pinned)
+    def test_flows_without_metal_in_the_taphole_are_unchanged(
+            self, dc_params, states, levels, expected):
+        furnace = make_furnace(dc_params, states)
+        result = furnace._calc_vdot_out(*levels, [0.5, 0.5], [0.5, 0.5], furnace._calc_params())
+        assert tuple(result) == tuple(expected)
+
+    def test_the_shared_interface_and_area_calculations_are_used(self, dc_params, monkeypatch):
+        calls = []
+        for name in ("_interface_levels", "_phase_areas"):
+            original = getattr(furnaces, name)
+
+            def recording(*args, original=original, name=name):
+                calls.append(name)
+                return original(*args)
+
+            monkeypatch.setattr(furnaces, name, recording)
+        furnace = make_furnace(dc_params, [True, True])
+        furnace.calc_dt(60.0)
+        assert calls.count("_interface_levels") == 8  # two tap-holes, four stages
+        assert calls.count("_phase_areas") == 8
+
+    def test_closed_tapholes_do_not_use_them(self, dc_params, monkeypatch):
+        def fail(*args):
+            raise AssertionError("called for a closed tap-hole")
+
+        monkeypatch.setattr(furnaces, "_interface_levels", fail)
+        monkeypatch.setattr(furnaces, "_phase_areas", fail)
+        make_furnace(dc_params, [False, False]).calc_dt(60.0)
+
+
+class TestDCTapholeTopContinuity:
+    """The flows must not jump when the slag surface falls through the top of a tap-hole, where
+    the tap-hole changes from completely to partly filled. The interface between the phases was
+    previously positioned with different formulas either side of that level, which gave a step in
+    both flows when there was metal in the tap-hole. The deformation of the interface is large
+    for an open bath, so the step was large (about 10% of the metal flow here)."""
+
+    @pytest.mark.parametrize("hole", [0, 1])
+    @pytest.mark.parametrize("hm_rel", [-0.045, -0.02, 0.0, 0.02, 0.04])
+    def test_flows_are_continuous(self, dc_params, hole, hm_rel):
+        furnace = make_furnace(dc_params, [hole == 0, hole == 1])
+        params, height, rt = furnace._calc_params(), dc_params["tapholeheights"][hole], 0.05
+        eps = 1e-9
+        below = furnace._calc_vdot_out(height + hm_rel, height + rt - eps, [1.5, 1.5], [1.5, 1.5],
+                                       params)
+        above = furnace._calc_vdot_out(height + hm_rel, height + rt + eps, [1.5, 1.5], [1.5, 1.5],
+                                       params)
+        assert below[2][hole] == pytest.approx(above[2][hole], rel=1e-5)
+        assert below[3][hole] == pytest.approx(above[3][hole], rel=1e-5)
+
+    def test_flows_have_no_step_over_a_sweep_of_the_slag_level(self, dc_params):
+        furnace = make_furnace(dc_params, [True, False])
+        params, rt = furnace._calc_params(), 0.05
+        for hm_rel in (-0.03, 0.0, 0.03, 0.045):
+            levels = numpy.linspace(rt + 0.02, rt - 0.02, 4001)
+            flows = numpy.array([
+                furnace._calc_vdot_out(0.2 + hm_rel, 0.2 + hs, [1.5, 1.5], [1.5, 1.5], params)[2:]
+                for hs in levels], dtype=object)
+            totals = numpy.array([[m[0], sl[0]] for m, sl in flows], dtype=float)
+            steps = numpy.abs(numpy.diff(totals, axis=0)).sum(axis=1)
+            assert steps.max() < 3 * numpy.median(steps)
+
+    def test_no_jump_while_the_slag_level_drains_through_the_top_of_the_taphole(self, dc_params):
+        """No smelting, metal in the low tap-hole, and its top (0.25 m) crossed by the slag
+        surface after about 225 s."""
+        dc_params.update(powerMW=0, hmetal_init=0.21, hslag_init=0.27)
+        furnace = make_furnace(dc_params, [True, False])
+        mass_flow, slag_levels = [], []
+        for _ in range(300):
+            furnace.calc_dt(1.0)
+            mass_flow.append(furnace.vdotmetal_outs[0] * furnace.densitymetal
+                             + furnace.vdotslag_outs[0] * furnace.densityslag)
+            slag_levels.append(furnace.hslag)
+        assert slag_levels[0] > 0.25 > slag_levels[-1]
+        assert numpy.abs(numpy.diff(mass_flow, 2)).max() < 0.05  # (0.41 kg/s with the step)
