@@ -6,7 +6,7 @@ from tappingsim.components.bedmodels import bedmodel_ergun
 from tappingsim.components.fdmodels import fdmodel_cheng
 from tappingsim.furnaces import SubmergedArcFurnace
 from tappingsim.ladles import CylindricalLadle
-from tappingsim.outlets import overflowmodel_step
+from tappingsim.components.outlets import overflowmodel_step
 from tappingsim.launders import SimpleSisoLaunder
 from tappingsim.tappingsystems import SAF, SAFWithLadles
 

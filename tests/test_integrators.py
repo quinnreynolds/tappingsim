@@ -1,9 +1,9 @@
-"""Unit tests for tappingsim.integrators module."""
+"""Unit tests for tappingsim.components.integrators module."""
 
 import numpy
 import pytest
-from tappingsim import integrators
-from tappingsim.integrators import integrate, linearly_implicit_step, rk4_step
+from tappingsim.components import integrators
+from tappingsim.components.integrators import integrate, linearly_implicit_step, rk4_step
 
 # One volume drained by one flow
 F1 = numpy.array([[-1.0]])

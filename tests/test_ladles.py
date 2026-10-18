@@ -6,7 +6,7 @@ import math
 import pytest
 from scipy.constants import g
 from tappingsim.ladles import CylindricalLadle
-from tappingsim.outlets import overflowmodel_exp, overflowmodel_step
+from tappingsim.components.outlets import overflowmodel_exp, overflowmodel_step
 
 K = 2 / 3 * math.sqrt(g)
 RHO_METAL, RHO_SLAG = 7000.0, 3000.0

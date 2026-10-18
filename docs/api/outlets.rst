@@ -1,7 +1,7 @@
-tappingsim.outlets
-==================
+tappingsim.components.outlets
+=============================
 
-.. automodule:: tappingsim.outlets
+.. automodule:: tappingsim.components.outlets
    :members:
    :undoc-members: False
    :show-inheritance:

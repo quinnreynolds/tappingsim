@@ -1,11 +1,13 @@
-"""Unit tests for tappingsim.outlets module."""
+"""Unit tests for tappingsim.components.outlets module."""
 
 import functools
 import math
 
 import pytest
 from scipy.constants import g
-from tappingsim.outlets import OUTLET_PREMULT, Outlet, overflowmodel_exp, overflowmodel_step
+from tappingsim.components.outlets import (
+    OUTLET_PREMULT, Outlet, overflowmodel_exp, overflowmodel_step,
+)
 
 K = 2 / 3 * math.sqrt(g)
 RHO_METAL, RHO_SLAG = 7000.0, 3000.0

@@ -24,11 +24,11 @@ The core models are:
   to ladles.
 - **Ladles**: cylindrical vessels that accumulate metal and slag, and overflow through an
   open-channel outlet.
-- **Outlets**: open-channel flow over a weir crest, with models for metal entrained in the slag
-  overflow, shared by the ladle and launder models.
-- **Integrators**: the time integration of the unit states: a linearly-implicit scheme for the
-  stiff overflow flows of the ladle and launder models, stable for large time steps, and an
-  explicit fourth-order Runge-Kutta scheme for the furnace.
+- **Components** (``tappingsim.components``): the shared parts from which the models are built
+  and configured: the burden pressure-drop and friction-factor models, the open-channel flow over
+  overflow outlets with models for metal entrained in the slag overflow, and the time integration
+  schemes: a linearly-implicit one for the stiff overflow flows of the ladle and launder models,
+  and an explicit fourth-order Runge-Kutta one for the furnace.
 
 Getting Started
 ---------------

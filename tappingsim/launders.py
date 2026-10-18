@@ -11,8 +11,8 @@ import math
 import numpy
 from scipy.constants import g
 
-from tappingsim.integrators import integrate
-from tappingsim.outlets import Outlet, overflowmodel_step
+from tappingsim.components.integrators import integrate
+from tappingsim.components.outlets import Outlet, overflowmodel_step
 
 
 def _sqrt(x):
@@ -124,7 +124,7 @@ class SkimmerLaunder:
         Function to be used to model the entrainment of metal in the slag flowing out of the
         slag trough outlet. It takes the distance of the slag-metal interface below the outlet
         crest, in m, and returns the metal volume fraction in the slag stream (see
-        tappingsim.outlets). The default is no entrainment.
+        tappingsim.components.outlets). The default is no entrainment.
     metal_trough_overflowmodel : function, optional
         Function to be used to model the entrainment of metal in the slag flowing out of the
         metal trough outlet, as for the slag trough. The default is no entrainment.
@@ -151,10 +151,10 @@ class SkimmerLaunder:
         The internal width of the metal trough at the floor, m.
     metal_trough_height : float
         The internal height of the metal trough, m.
-    slag_trough_outlet : tappingsim.outlets.Outlet
+    slag_trough_outlet : tappingsim.components.outlets.Outlet
         The slag trough overflow outlet, with its crest height above the trough floor, width,
         discharge coefficients, phase densities and overflow model.
-    metal_trough_outlet : tappingsim.outlets.Outlet
+    metal_trough_outlet : tappingsim.components.outlets.Outlet
         The metal trough overflow outlet, as for the slag trough.
     density_metal : float
         The density of the metal phase, kg/m3.
@@ -193,7 +193,7 @@ class SkimmerLaunder:
     default step model there is no entrainment, and the slag outflows are free of metal.
 
     The state is integrated in time with a linearly-implicit (Rosenbrock-Euler) scheme (see
-    tappingsim.integrators), which remains stable for time steps far beyond the limit of
+    tappingsim.components.integrators), which remains stable for time steps far beyond the limit of
     explicit schemes. That limit is
     proportional to the throughput and tends to zero as the flow does, because the flow
     through the weir underflow channel varies as the square root of the pressure difference.
@@ -390,7 +390,7 @@ class SkimmerLaunder:
         Overflow from a trough occurs when the top of the slag layer exceeds the outlet
         crest height. Each phase flows over the outlet as over a broad-crested weir, with
         flowrate proportional to Cd*width*head**1.5, as described in
-        tappingsim.outlets.Outlet. Metal entrainment in the slag outflow is calculated
+        tappingsim.components.outlets.Outlet. Metal entrainment in the slag outflow is calculated
         using the configured overflow model of each trough.
 
         Parameters
@@ -499,7 +499,7 @@ class SkimmerLaunder:
 
         The time step is divided into equal sub-steps no longer than max_substep, each
         integrated with a linearly-implicit (Rosenbrock-Euler) scheme (see
-        tappingsim.integrators.integrate). The inflow rates are held constant over the time
+        tappingsim.components.integrators.integrate). The inflow rates are held constant over the time
         step. The outlet flowrates are set to the average of the flowrates over the
         sub-steps, so that the change in the volumes held in the troughs is exactly the
         volume added by the inflows less the volume leaving by the outlets.

@@ -5,7 +5,7 @@ import functools
 import numpy
 import pytest
 from scipy.constants import g
-from tappingsim.outlets import overflowmodel_exp
+from tappingsim.components.outlets import overflowmodel_exp
 from tappingsim.launders import SimpleSisoLaunder, SkimmerLaunder
 
 

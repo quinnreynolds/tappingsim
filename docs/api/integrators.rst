@@ -1,7 +1,7 @@
-tappingsim.integrators
-======================
+tappingsim.components.integrators
+=================================
 
-.. automodule:: tappingsim.integrators
+.. automodule:: tappingsim.components.integrators
    :members:
    :undoc-members: False
    :show-inheritance:

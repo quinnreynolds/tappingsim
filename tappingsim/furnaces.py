@@ -15,7 +15,7 @@ from collections import namedtuple
 import numpy
 from scipy.constants import g, pi
 
-from tappingsim.integrators import rk4_step
+from tappingsim.components.integrators import rk4_step
 
 
 # Convergence tolerance of the iteration for the tap-hole velocities, as the
@@ -453,7 +453,7 @@ class SubmergedArcFurnace():
     This model is based on the formulation by Olsen & Reynolds. [Olsen2020]_
 
     The metal and slag levels are integrated in time with the classical
-    fourth-order Runge-Kutta scheme (see tappingsim.integrators.rk4_step). The
+    fourth-order Runge-Kutta scheme (see tappingsim.components.integrators.rk4_step). The
     drainage of the furnace is slow and smooth, so the scheme is stable for
     time steps of many minutes, and its error in the levels and the tapped
     masses is orders of magnitude lower than that of a first-order scheme with

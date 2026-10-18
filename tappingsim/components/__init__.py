@@ -10,3 +10,5 @@ package are configured with, or call, these components.
 
 from . import bedmodels
 from . import fdmodels
+from . import integrators
+from . import outlets
