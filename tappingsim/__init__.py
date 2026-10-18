@@ -4,6 +4,7 @@
 from importlib.metadata import version
 __version__ = version("tappingsim")
 
+from . import components
 from . import furnaces
 from . import launders
 from . import ladles

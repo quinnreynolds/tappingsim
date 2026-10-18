@@ -2,8 +2,11 @@
 
 import numpy
 import pytest
-from tappingsim.furnaces import SubmergedArcFurnace, bedmodel_ergun, fdmodel_cheng
-from tappingsim.ladles import CylindricalLadle, overflowmodel_step
+from tappingsim.components.bedmodels import bedmodel_ergun
+from tappingsim.components.fdmodels import fdmodel_cheng
+from tappingsim.furnaces import SubmergedArcFurnace
+from tappingsim.ladles import CylindricalLadle
+from tappingsim.components.outlets import overflowmodel_step
 from tappingsim.launders import SimpleSisoLaunder
 from tappingsim.tappingsystems import SAF, SAFWithLadles
 
@@ -55,7 +58,9 @@ def saf_with_ladles_system(furnace_params):
     ladles = [
         CylindricalLadle(
             diameter=1.8, depth=2.0, hmetal_init=0, hslag_init=0,
-            overflowmodel=overflowmodel_step, overflowconsts=[],
+            overflowmodel=overflowmodel_step,
+            outlet_width=0.3, outlet_slag_Cd=0.6, outlet_metal_Cd=0.6,
+            density_metal=7000, density_slag=3000,
         )
         for _ in range(3)
     ]
@@ -220,3 +225,34 @@ class TestSAFWithLadlesMultiTapCycle:
         assert total_slag > 0
         # Slag-to-metal ratio should be in the right ballpark
         assert 0.5 < total_slag / total_metal < 2.0
+
+
+class TestSAFWithOpenChannelLadles:
+    def test_ladle_chain_conserves_volume(self, furnace_params):
+        """Everything entering the first ladle is either stored in the ladles or has
+        left over the outlet of the last ladle."""
+        furnace = SubmergedArcFurnace(**furnace_params)
+        ladles = [
+            CylindricalLadle(
+                diameter=1.8, depth=0.5, hmetal_init=0, hslag_init=0,
+                overflowmodel=overflowmodel_step,
+                outlet_width=0.3, outlet_slag_Cd=0.6, outlet_metal_Cd=0.6,
+                density_metal=7000, density_slag=3000,
+            )
+            for _ in range(2)
+        ]
+        system = SAFWithLadles(furnace=furnace, launder=SimpleSisoLaunder(), ladles=ladles)
+        system.open_taphole()
+        area = numpy.pi * 0.25 * 1.8**2
+        metal_in = slag_in = metal_lost = slag_lost = 0
+        for _ in range(120):
+            system.calc_dt(60)
+            metal_in += 60 * furnace.vdotmetal_out
+            slag_in += 60 * furnace.vdotslag_out
+            metal_lost += 60 * ladles[-1].vdotmetal_out
+            slag_lost += 60 * ladles[-1].vdotslag_out
+        assert ladles[-1].vdotslag_out + ladles[-1].vdotmetal_out > 0
+        metal_stored = sum(area * ldl.hmetal for ldl in ladles)
+        slag_stored = sum(area * (ldl.hslag - ldl.hmetal) for ldl in ladles)
+        assert metal_stored + metal_lost == pytest.approx(metal_in, rel=1e-9)
+        assert slag_stored + slag_lost == pytest.approx(slag_in, rel=1e-9)

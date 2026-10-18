@@ -20,8 +20,15 @@ The core models are:
   tapped out through a configurable taphole model.
 - **Taphole flow**: packed-bed pressure drop (Kozeny-Carman or Ergun) and pipe friction factor
   (Bellos, Cheng, or Serghides) correlations to compute volumetric outflow.
-- **Launders**: simple pass-through models routing flow from the furnace taphole to ladles.
-- **Ladles**: cylindrical vessels that accumulate metal and slag, with overflow models.
+- **Launders**: pass-through and two-tank skimmer models routing flow from the furnace taphole
+  to ladles.
+- **Ladles**: cylindrical vessels that accumulate metal and slag, and overflow through an
+  open-channel outlet.
+- **Components** (``tappingsim.components``): the shared parts from which the models are built
+  and configured: the burden pressure-drop and friction-factor models, the open-channel flow over
+  overflow outlets with models for metal entrained in the slag overflow, and the time integration
+  schemes: a linearly-implicit one for the stiff overflow flows of the ladle and launder models,
+  and an explicit fourth-order Runge-Kutta one for the furnace.
 
 Getting Started
 ---------------

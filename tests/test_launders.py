@@ -1,8 +1,11 @@
 """Unit tests for tappingsim.launders module."""
 
+import functools
+
 import numpy
 import pytest
 from scipy.constants import g
+from tappingsim.components.outlets import overflowmodel_exp
 from tappingsim.launders import SimpleSisoLaunder, SkimmerLaunder
 
 
@@ -82,6 +85,17 @@ def set_levels(launder, ss_hmetal, ss_hslag, ms_hmetal, ms_hslag):
     launder.metal_trough_hslag = ms_hslag
 
 
+def calc_outlet_flows(launder):
+    """Calculate the outlet flows for the current levels, and store them in the outflow
+    attributes."""
+    (
+        launder.slag_trough_vdotmetal_out,
+        launder.slag_trough_vdotslag_out,
+        launder.metal_trough_vdotmetal_out,
+        launder.metal_trough_vdotslag_out,
+    ) = launder._calc_vdot_out(*levels(launder))
+
+
 def total_volumes(launder):
     """Total (metal, slag) volume held in both troughs, m3."""
     vm_ss, vs_ss, vm_ms, vs_ms = launder._levels_to_volumes(
@@ -114,11 +128,10 @@ class TestSkimmerLaunderInit:
     def test_parameters_stored(self, skimmer):
         assert skimmer.slag_trough_length == 2.0
         assert skimmer.weir_underflow_height == 0.3
-        assert skimmer.metal_trough_outlet_metal_Cd == 0.5
+        assert skimmer.metal_trough_outlet.metal_Cd == 0.5
+        assert skimmer.slag_trough_outlet.crest_height == 0.5
+        assert skimmer.slag_trough_outlet.width == 0.5
         assert skimmer.density_slag == RHO_SLAG
-
-    def test_outlet_premult(self, skimmer):
-        assert skimmer.outlet_premult == pytest.approx(2 / 3 * numpy.sqrt(g))
 
 
 class TestSkimmerLaunderGeometry:
@@ -166,7 +179,7 @@ class TestSkimmerLaunderGeometry:
 class TestSkimmerLaunderOutlets:
     def test_no_flow_below_crest(self, skimmer):
         set_levels(skimmer, 0.2, 0.45, 0.1, 0.35)
-        skimmer._calc_vdot_out(1.0)
+        calc_outlet_flows(skimmer)
         assert skimmer.slag_trough_vdotmetal_out == 0
         assert skimmer.slag_trough_vdotslag_out == 0
         assert skimmer.metal_trough_vdotmetal_out == 0
@@ -175,7 +188,7 @@ class TestSkimmerLaunderOutlets:
     def test_slag_only_overflow(self, skimmer):
         """Slag above the crest with metal below it: broad-crested weir flow of slag."""
         set_levels(skimmer, 0.2, 0.6, 0.1, 0.55)
-        skimmer._calc_vdot_out(1.0)
+        calc_outlet_flows(skimmer)
         k = 2 / 3 * numpy.sqrt(g)
         assert skimmer.slag_trough_vdotslag_out == pytest.approx(k * 0.6 * 0.5 * 0.1**1.5)
         assert skimmer.slag_trough_vdotmetal_out == 0
@@ -186,7 +199,7 @@ class TestSkimmerLaunderOutlets:
         """Metal above the crest: slag flows on its layer thickness, metal on the
         slag-equivalent head plus its own head above the crest."""
         set_levels(skimmer, 0.55, 0.7, 0.5, 0.6)
-        skimmer._calc_vdot_out(1.0)
+        calc_outlet_flows(skimmer)
         k = 2 / 3 * numpy.sqrt(g)
         ratio = RHO_SLAG / RHO_METAL
         # slag trough: crest 0.5, h1 = 0.15, h2 = 0.05
@@ -200,9 +213,9 @@ class TestSkimmerLaunderOutlets:
 
     def test_flow_resets_when_level_drops(self, skimmer):
         set_levels(skimmer, 0.2, 0.6, 0.1, 0.55)
-        skimmer._calc_vdot_out(1.0)
+        calc_outlet_flows(skimmer)
         set_levels(skimmer, 0.2, 0.45, 0.1, 0.35)
-        skimmer._calc_vdot_out(1.0)
+        calc_outlet_flows(skimmer)
         assert skimmer.slag_trough_vdotslag_out == 0
         assert skimmer.metal_trough_vdotslag_out == 0
 
@@ -321,7 +334,8 @@ class TestSkimmerLaunderTimeIntegration:
         long_step.calc_dt(10.0, 0.01, 0.02)
         for _ in range(5):
             repeated.calc_dt(2.0, 0.01, 0.02)
-        assert levels(long_step) == pytest.approx(levels(repeated), abs=1e-12)
+        # (equal up to finite-difference noise in the flow sensitivities)
+        assert levels(long_step) == pytest.approx(levels(repeated), abs=1e-9)
 
     def test_mass_balance_over_long_step_with_overflow(self, skimmer):
         """The outflows reported for a step spanning many sub-steps are the average over
@@ -392,3 +406,247 @@ class TestSkimmerLaunderTimeIntegration:
         errors = [numpy.abs(state_after(dt) - reference).max() for dt in (2.0, 1.0, 0.5)]
         assert errors[0] / errors[1] == pytest.approx(2, abs=0.5)
         assert errors[1] / errors[2] == pytest.approx(2, abs=0.5)
+
+
+def constant_fraction_model(dh, fraction):
+    """Entrainment model with a constant metal fraction, for testing."""
+    return fraction
+
+
+def exp_model(premultiplier, decay):
+    return functools.partial(overflowmodel_exp, premultiplier=premultiplier, decay=decay)
+
+
+class TestSkimmerLaunderEntrainment:
+    k = 2 / 3 * numpy.sqrt(g)
+
+    def test_default_is_no_entrainment(self, skimmer):
+        set_levels(skimmer, 0.2, 0.6, 0.1, 0.55)
+        calc_outlet_flows(skimmer)
+        assert skimmer.slag_trough_vdotmetal_out == 0
+        assert skimmer.metal_trough_vdotmetal_out == 0
+
+    def test_overflow_models_are_callable_functions_of_distance(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0),
+            metal_trough_overflowmodel=functools.partial(constant_fraction_model, fraction=0.3),
+        )
+        slag_model = launder.slag_trough_outlet.overflowmodel
+        assert slag_model(0.5) == pytest.approx(0.2 * numpy.exp(-1.0))
+        assert launder.metal_trough_outlet.overflowmodel(0.5) == 0.3
+
+    def test_entrained_metal_in_slag_trough_slag_only_overflow(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0)
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        calc_outlet_flows(launder)
+        vfrac = 0.2 * numpy.exp(-2.0 * (0.5 - 0.2))
+        qslag = self.k * 0.6 * 0.5 * 0.1**1.5
+        assert launder.slag_trough_vdotmetal_out == pytest.approx(vfrac * qslag)
+        assert launder.slag_trough_vdotslag_out == pytest.approx((1 - vfrac) * qslag)
+
+    def test_entrained_metal_in_metal_trough_slag_only_overflow(self):
+        launder = make_skimmer(
+            metal_trough_overflowmodel=exp_model(0.4, 3.0)
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        calc_outlet_flows(launder)
+        vfrac = 0.4 * numpy.exp(-3.0 * (0.4 - 0.1))
+        qslag = self.k * 0.65 * 0.5 * 0.15**1.5
+        assert launder.metal_trough_vdotmetal_out == pytest.approx(vfrac * qslag)
+        assert launder.metal_trough_vdotslag_out == pytest.approx((1 - vfrac) * qslag)
+
+    def test_each_trough_uses_its_own_model(self):
+        """Entrainment is only active at the outlet whose model is configured."""
+        launder = make_skimmer(
+            metal_trough_overflowmodel=functools.partial(constant_fraction_model, fraction=0.25),
+        )
+        set_levels(launder, 0.2, 0.6, 0.1, 0.55)
+        calc_outlet_flows(launder)
+        assert launder.slag_trough_vdotmetal_out == 0
+        qslag = self.k * 0.65 * 0.5 * 0.15**1.5
+        assert launder.metal_trough_vdotmetal_out == pytest.approx(0.25 * qslag)
+        assert launder.metal_trough_vdotslag_out == pytest.approx(0.75 * qslag)
+
+    def test_entrained_metal_adds_to_metal_overflow(self):
+        plain, entraining = make_skimmer(), make_skimmer(
+            slag_trough_overflowmodel=functools.partial(constant_fraction_model, fraction=0.1)
+        )
+        for launder in (plain, entraining):
+            set_levels(launder, 0.55, 0.7, 0.3, 0.45)
+            calc_outlet_flows(launder)
+        qslag = self.k * 0.6 * 0.5 * 0.15**1.5
+        assert entraining.slag_trough_vdotmetal_out == pytest.approx(
+            plain.slag_trough_vdotmetal_out + 0.1 * qslag
+        )
+        assert entraining.slag_trough_vdotslag_out == pytest.approx(0.9 * qslag)
+
+    def test_no_entrainment_without_metal(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=functools.partial(constant_fraction_model, fraction=0.3)
+        )
+        set_levels(launder, 0.0, 0.6, 0.0, 0.0)
+        calc_outlet_flows(launder)
+        assert launder.slag_trough_vdotmetal_out == 0
+        assert launder.slag_trough_vdotslag_out > 0
+
+    def test_mass_balance_with_entrainment_over_long_step(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0),
+            metal_trough_overflowmodel=exp_model(0.3, 1.0),
+        )
+        set_levels(launder, 0.4, 0.7, 0.3, 0.45)
+        dt = 60.0
+        vmetal0, vslag0 = total_volumes(launder)
+        launder.calc_dt(dt, 0.03, 0.05)
+        vmetal1, vslag1 = total_volumes(launder)
+        metal_out = launder.slag_trough_vdotmetal_out + launder.metal_trough_vdotmetal_out
+        slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
+        assert launder.slag_trough_vdotslag_out > 0 and launder.metal_trough_vdotslag_out > 0
+        assert vmetal1 - vmetal0 == pytest.approx((0.03 - metal_out) * dt)
+        assert vslag1 - vslag0 == pytest.approx((0.05 - slag_out) * dt)
+
+    def test_steady_state_with_entrainment_outflow_matches_inflow(self):
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0),
+            metal_trough_overflowmodel=exp_model(0.3, 1.0),
+        )
+        for _ in range(3000):
+            launder.calc_dt(1.0, 0.01, 0.02)
+        metal_out = launder.slag_trough_vdotmetal_out + launder.metal_trough_vdotmetal_out
+        slag_out = launder.slag_trough_vdotslag_out + launder.metal_trough_vdotslag_out
+        assert metal_out == pytest.approx(0.01, rel=1e-3)
+        assert slag_out == pytest.approx(0.02, rel=1e-3)
+
+
+class TestSkimmerLaunderWeirFlow:
+    """Flow through the weir underflow channel (height 0.3 m, width 0.3 m in the fixture)."""
+
+    area = 0.3 * 0.3
+
+    def expected_flows(self, source_hmetal, source_hslag, deltaP):
+        """Metal and slag flowrates, with the phase proportions of the channel taken from the
+        trough the flow comes from, and the sign of the pressure difference."""
+        height = 0.3
+        if source_hmetal > height:
+            metal_fraction, slag_fraction = 1.0, 0.0
+        elif source_hslag > height:
+            metal_fraction, slag_fraction = source_hmetal / height, 1 - source_hmetal / height
+        else:
+            metal_fraction = source_hmetal / height
+            slag_fraction = (source_hslag - source_hmetal) / height
+        sign = numpy.sign(deltaP)
+        return (
+            metal_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_METAL),
+            slag_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_SLAG),
+        )
+
+    @staticmethod
+    def pressure_difference(hm_ss, hs_ss, hm_ms, hs_ms):
+        def pressure(hmetal, hslag):
+            return (hmetal * RHO_METAL + (hslag - hmetal) * RHO_SLAG) * g
+
+        return pressure(hm_ss, hs_ss) - pressure(hm_ms, hs_ms)
+
+    # (hmetal, hslag) of the trough the flow comes from, with the interface above the top of
+    # the channel, below it with the slag surface above it, and with both below it
+    sources = [(0.4, 0.5), (0.2, 0.5), (0.1, 0.25)]
+    receivers = [(0.05, 0.06), (0.0, 0.0), (0.05, 0.05)]
+
+    @pytest.mark.parametrize("source", sources)
+    def test_forward_flow_takes_proportions_from_slag_trough(self, skimmer, source):
+        receiver = self.receivers[0]
+        levels = (*source, *receiver)
+        deltaP = self.pressure_difference(*levels)
+        assert deltaP > 0
+        expected = self.expected_flows(*source, deltaP)
+        assert skimmer._calc_vdot_weir(*levels) == pytest.approx(expected, rel=1e-12)
+
+    @pytest.mark.parametrize("source", sources)
+    def test_reversed_flow_takes_proportions_from_metal_trough(self, skimmer, source):
+        receiver = self.receivers[0]
+        levels = (*receiver, *source)
+        deltaP = self.pressure_difference(*levels)
+        assert deltaP < 0
+        expected = self.expected_flows(*source, deltaP)
+        assert skimmer._calc_vdot_weir(*levels) == pytest.approx(expected, rel=1e-12)
+
+    def test_flow_is_antisymmetric_when_the_troughs_are_swapped(self, skimmer):
+        """The two troughs are treated alike: swapping them reverses the flow."""
+        for source in self.sources:
+            for receiver in self.receivers:
+                forward = skimmer._calc_vdot_weir(*source, *receiver)
+                reverse = skimmer._calc_vdot_weir(*receiver, *source)
+                assert reverse == pytest.approx((-forward[0], -forward[1]), rel=1e-12, abs=1e-15)
+
+    def test_no_flow_when_pressures_are_equal(self, skimmer):
+        assert skimmer._calc_vdot_weir(0.2, 0.28, 0.2, 0.28) == (0, 0)
+
+    def test_reversed_flow_cannot_draw_slag_from_a_trough_without_slag(self, skimmer):
+        """Regression test: with the interface above the channel and no slag layer in the
+        metal trough, a reversed flow carries only metal. It used to carry slag in the
+        proportions of the slag trough, which could remove more slag than the metal trough
+        held."""
+        levels = (0.15, 0.4, 0.45, 0.45)
+        assert self.pressure_difference(*levels) < 0
+        vdot_metal, vdot_slag = skimmer._calc_vdot_weir(*levels)
+        assert vdot_metal < 0
+        assert vdot_slag == 0
+
+
+class TestSkimmerLaunderPhysicalVolumes:
+    """The phase volumes stay positive when the weir flow reverses and for large sub-steps."""
+
+    @staticmethod
+    def smallest_volume(launder):
+        return min(launder._levels_to_volumes(*levels(launder)))
+
+    def test_reversed_flow_conserves_volume_and_stays_positive(self, skimmer):
+        """A much fuller metal trough drains back through the weir."""
+        set_levels(skimmer, 0.05, 0.08, 0.45, 0.46)
+        assert weir_pressure_difference(skimmer) < 0
+        dt = 60.0
+        vmetal0, vslag0 = total_volumes(skimmer)
+        skimmer.calc_dt(dt, 0.0, 0.0)
+        vmetal1, vslag1 = total_volumes(skimmer)
+        metal_out = skimmer.slag_trough_vdotmetal_out + skimmer.metal_trough_vdotmetal_out
+        slag_out = skimmer.slag_trough_vdotslag_out + skimmer.metal_trough_vdotslag_out
+        assert vmetal1 - vmetal0 == pytest.approx(-metal_out * dt, abs=1e-9)
+        assert vslag1 - vslag0 == pytest.approx(-slag_out * dt, abs=1e-9)
+        assert self.smallest_volume(skimmer) >= 0
+
+    def test_draining_after_tap_shut_off_stays_positive(self):
+        """Regression test: with entrainment at the slag trough outlet, draining a launder
+        after the inflow stops used to give a negative slag volume, as the reversed weir flow
+        drew slag from a trough holding less than it removed."""
+        launder = make_skimmer(
+            slag_trough_overflowmodel=functools.partial(
+                overflowmodel_exp, premultiplier=0.4, decay=3.0
+            )
+        )
+        for _ in range(600):
+            launder.calc_dt(1.0, 0.03, 0.06)
+        for _ in range(2000):
+            launder.calc_dt(1.0, 0.0, 0.0)
+            assert self.smallest_volume(launder) >= -1e-12
+
+    def test_random_inflows_and_steps_stay_positive(self):
+        rng = numpy.random.default_rng(11)
+        launder = make_skimmer(
+            slag_trough_overflowmodel=exp_model(0.2, 2.0),
+            metal_trough_overflowmodel=exp_model(0.3, 1.0),
+        )
+        for _ in range(300):
+            dt = rng.uniform(0.05, 60)
+            launder.calc_dt(dt, rng.uniform(0, 0.05), rng.uniform(0, 0.08))
+            assert self.smallest_volume(launder) >= -1e-12
+
+    def test_large_substeps_stay_positive(self):
+        """Sub-steps far beyond the accurate range are repeated as smaller steps instead of
+        overshooting to negative volumes."""
+        rng = numpy.random.default_rng(3)
+        launder = make_skimmer(max_substep=5.0)
+        for _ in range(200):
+            launder.calc_dt(20.0, rng.uniform(0, 0.05), rng.uniform(0, 0.08))
+            assert self.smallest_volume(launder) >= -1e-12
