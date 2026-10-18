@@ -4,6 +4,7 @@ import math
 
 import numpy
 import pytest
+from tappingsim import furnaces
 from tappingsim.components.fdmodels import fdmodel_bellos
 from tappingsim.furnaces import DCArcFurnace
 
@@ -246,3 +247,136 @@ class TestDCArcFurnaceTimeIntegration:
         furnace = make_furnace(dc_params, [True, True])
         furnace.calc_dt(60.0)
         assert furnace.vdotslag_outs[0] > 0 and furnace.vdotslag_outs[1] > 0
+
+
+class TestDCTapholeParameters:
+    """The parameters of the flow calculation are a snapshot for each tap-hole."""
+
+    def test_one_snapshot_for_each_taphole(self, dc_params):
+        params = make_furnace(dc_params, [True, False])._calc_params()
+        assert len(params) == 2
+        assert all(isinstance(p, furnaces._TapholeParams) for p in params)
+
+    def test_values_follow_the_taphole_lists(self, dc_params):
+        params = make_furnace(dc_params, [True, False])._calc_params()
+        assert [p.tapholediameter for p in params] == [0.1, 0.1]
+        assert [p.tapholeheight for p in params] == [0.2, 0.5]
+        assert [p.tapholeroughness for p in params] == [0.001, 0.002]
+        assert [p.tapholeopen_yn for p in params] == [True, False]
+        assert all(p.fdmodel is fdmodel_bellos for p in params)
+        assert all(p.densitymetal == 6500 and p.densityslag == 3000 for p in params)
+        assert all(p.viscositymetal == 0.005 and p.viscosityslag == 0.1 for p in params)
+
+    def test_open_bath_has_unit_porosity_and_only_the_entrance_loss(self, dc_params):
+        dc_params["entrykls"] = [0.25, 0.5]
+        for p, entrykl in zip(make_furnace(dc_params)._calc_params(), (0.25, 0.5)):
+            assert p.bedporosity == 1.0
+            assert p.b_metal == 0 and p.b_slag == 0
+            assert p.a_metal == pytest.approx(0.5 * (1 + entrykl) * 6500)
+            assert p.a_slag == pytest.approx(0.5 * (1 + entrykl) * 3000)
+
+    def test_snapshot_is_not_changed_by_later_changes(self, dc_params):
+        furnace = make_furnace(dc_params, [True, False])
+        before = furnace._calc_params()
+        furnace.tapholesopen_yn = [False, True]
+        assert [p.tapholeopen_yn for p in before] == [True, False]
+        assert [p.tapholeopen_yn for p in furnace._calc_params()] == [False, True]
+
+    def test_changed_attributes_are_used_by_the_next_step(self, dc_params):
+        furnace = make_furnace(dc_params, [True, False])
+        furnace.calc_dt(60.0)
+        before = furnace.vdotmetal_outs[0]
+        furnace.entrykls[0] = 2.0
+        furnace.calc_dt(60.0)
+        assert furnace.vdotmetal_outs[0] < before
+
+
+class TestDCFlowCalculation:
+    # (metal level, slag level) and the metal velocities, slag velocities, metal flows and slag
+    # flows from the two tap-holes, both open, starting the iteration from 0.5 m/s. Both
+    # tap-holes are completely filled. These pinned values were calculated before the velocity
+    # iteration was replaced by the shared one, which must not change them.
+    pinned = [
+        ((0.22, 0.8), ([1.8698590665899828, 1.250389293831332],
+                       [2.783269981948702, 1.883992190130447],
+                       [0.008800820584131949, 0.0],
+                       [0.008759801604620154, 0.014796840059835894])),
+        ((0.3, 0.9), ([2.1310514148759436, 1.4436482550725358],
+                      [3.1784985213907144, 2.1763368354537493],
+                      [0.014673886894439788, 0.0],
+                      [0.0030775233919942547, 0.017092909534995895])),
+        ((0.15, 0.7), ([1.6679050553370796, 1.0211702932754265],
+                       [2.4771516603102013, 1.536619928839739],
+                       [0.0031208350372109246, 0.0],
+                       [0.01482047860575409, 0.012068584699506488])),
+        ((0.5, 1.0), ([2.528496562421828, 1.637274918771857],
+                      [3.7781406344327033, 2.46807159540749],
+                      [0.019858765562828652, 0.006539708417610767],
+                      [0.0, 0.009526059230394906])),
+        ((0.1, 0.65), ([1.5824255288413915, 0.884545121786582],
+                       [2.3474815617636215, 1.33121537918555],
+                       [0.00020861847025351073, 0.0],
+                       [0.018127597729595234, 0.010455341138987688])),
+        ((0.25, 1.2), ([2.425701726016871, 1.9094396315591884],
+                       [3.6232622711237297, 2.8761816268312312],
+                       [0.01278489122305204, 0.0],
+                       [0.0093602875699371, 0.02258947767310734])),
+    ]
+
+    @pytest.mark.parametrize("levels, expected", pinned)
+    def test_flows_are_unchanged(self, dc_params, levels, expected):
+        furnace = make_furnace(dc_params, [True, True])
+        result = furnace._calc_vdot_out(*levels, [0.5, 0.5], [0.5, 0.5], furnace._calc_params())
+        assert tuple(result) == tuple(expected)
+
+    def test_each_taphole_is_calculated_independently(self, dc_params):
+        """A tap-hole in a furnace with two gives the flows of a furnace with only that one."""
+        both = make_furnace(dc_params, [True, True])
+        umetals, uslags, vdotmetals, vdotslags = both._calc_vdot_out(
+            0.3, 0.9, [0.5, 0.5], [0.5, 0.5], both._calc_params())
+        for i in (0, 1):
+            single_params = dict(dc_params)
+            for key in ("tapholediameters", "tapholelengths", "tapholeroughnesses",
+                        "tapholeheights", "entrykls", "fdmodels"):
+                single_params[key] = [dc_params[key][i]]
+            single = make_furnace(single_params, [True])
+            expected = single._calc_vdot_out(0.3, 0.9, [0.5], [0.5], single._calc_params())
+            assert (umetals[i], uslags[i], vdotmetals[i], vdotslags[i]) == tuple(
+                values[0] for values in expected)
+
+    def test_closed_taphole_has_no_velocity_or_flow(self, dc_params):
+        furnace = make_furnace(dc_params, [False, True])
+        umetals, uslags, vdotmetals, vdotslags = furnace._calc_vdot_out(
+            0.3, 0.9, [0.5, 0.5], [0.5, 0.5], furnace._calc_params())
+        assert (umetals[0], uslags[0], vdotmetals[0], vdotslags[0]) == (0, 0, 0, 0)
+        assert uslags[1] > 0
+
+
+class TestDCVelocitySolver:
+    def test_the_shared_solver_is_used_for_each_open_taphole(self, dc_params, monkeypatch):
+        calls = []
+        original = furnaces._solve_velocities
+
+        def recording(pa, umetal0, uslag0, params):
+            calls.append(params.tapholeheight)
+            return original(pa, umetal0, uslag0, params)
+
+        monkeypatch.setattr(furnaces, "_solve_velocities", recording)
+        furnace = make_furnace(dc_params, [False, True])
+        furnace.calc_dt(60.0)
+        assert calls == [0.5] * 4  # one for each of the four stages of the step
+
+    def test_non_convergence_raises(self, dc_params, monkeypatch):
+        """The iteration has a cap, so a case that does not converge ends with an error
+        instead of looping for ever."""
+        monkeypatch.setattr(furnaces, "_VELOCITY_TOLERANCE", 0.0)
+        monkeypatch.setattr(furnaces, "_VELOCITY_MAX_ITERATIONS", 2)
+        with pytest.raises(RuntimeError):
+            make_furnace(dc_params, [True, False]).calc_dt(60.0)
+
+    def test_closed_tapholes_do_not_run_the_solver(self, dc_params, monkeypatch):
+        monkeypatch.setattr(furnaces, "_VELOCITY_TOLERANCE", 0.0)
+        monkeypatch.setattr(furnaces, "_VELOCITY_MAX_ITERATIONS", 1)
+        furnace = make_furnace(dc_params, [False, False])
+        furnace.calc_dt(60.0)
+        assert furnace.vdotmetal_outs == [0, 0]

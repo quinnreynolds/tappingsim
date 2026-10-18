@@ -867,26 +867,48 @@ class DCArcFurnace():
         self.umetals = [0 for n in range(self.ntapholes)]
         self.uslags = [0 for n in range(self.ntapholes)]
         
-    def _calc_vdot_out(self, hmetal, hslag, umetals0, uslags0, 
-                       tapholediameters, tapholelengths, tapholeheights, 
-                       tapholeroughnesses, entrykls, densitymetal, densityslag, 
-                       viscositymetal, viscosityslag, tapholesopen_yn, 
-                       allownegativeheights_yn, fdmodels):
+    def _calc_vdot_out(self, hmetal, hslag, umetals0, uslags0, params):
+        """Calculate volumetric outflow rates of metal and slag through each
+        tap-hole for the given furnace state.
+
+        Solves for the phase velocities in each open tap-hole, accounting for
+        the entrance and friction losses and interface deformation effects.
+        There is no flow through a closed tap-hole.
+
+        Parameters
+        ----------
+        hmetal : float
+            Current metal bath level above hearth, m.
+        hslag : float
+            Current slag bath level above hearth, m.
+        umetals0 : list of float
+            Initial guesses for the metal velocity in each tap-hole, m/s.
+        uslags0 : list of float
+            Initial guesses for the slag velocity in each tap-hole, m/s.
+        params : list of _TapholeParams
+            Parameters of the flow calculation for each tap-hole.
+
+        Returns
+        -------
+        umetals : list of float
+            Velocity of metal through each tap-hole, m/s.
+        uslags : list of float
+            Velocity of slag through each tap-hole, m/s.
+        vdotmetal_outs : list of float
+            Volumetric outflow rate of metal from each tap-hole, m3/s.
+        vdotslag_outs : list of float
+            Volumetric outflow rate of slag from each tap-hole, m3/s.
+
+        """
         umetals, uslags, vdotmetal_outs, vdotslag_outs = [], [], [], []
-        for (tapholeopen_yn, tapholediameter, 
-             entrykl, tapholeheight, fdmodel, 
-             tapholeroughness, tapholelength, 
-             umetal0, uslag0) in zip(tapholesopen_yn, tapholediameters, 
-                                     entrykls, tapholeheights, fdmodels, 
-                                     tapholeroughnesses, tapholelengths, 
-                                     umetals0, uslags0):
+        for p, umetal0, uslag0 in zip(params, umetals0, uslags0):
             umetal, uslag, area_m, area_s = 0, 0, 0, 0
-            if tapholeopen_yn:
-                rt = 0.5 * tapholediameter
-                a_m = 0.5 * (1 + entrykl) * densitymetal
-                a_s = 0.5 * (1 + entrykl) * densityslag
-                b_m, b_s = 0, 0
-                
+            if p.tapholeopen_yn:
+                rt = 0.5 * p.tapholediameter
+                tapholeheight = p.tapholeheight
+                densitymetal, densityslag = p.densitymetal, p.densityslag
+                allownegativeheights_yn = p.allownegativeheights_yn
+
                 # Tapping pressure calculation (applied to both phases, based on 
                 # undeformed interfaces). Integrated pressure field in z, averaged 
                 # with total height in taphole.
@@ -920,21 +942,8 @@ class DCArcFurnace():
                         pa = g * (densityslag*(hs-hm) + densitymetal*hm)
                 
                 # calculate phase velocities
-                converged, umetal, uslag = 1, umetal0, uslag0
-                while converged > 1e-6:
-                    fdm = fdmodel(umetal, densitymetal, viscositymetal, 
-                                tapholediameter, tapholeroughness)
-                    fds = fdmodel(uslag, densityslag, viscosityslag, 
-                                tapholediameter, tapholeroughness)
-                    a_mc = a_m + (0.5 * densitymetal * fdm 
-                                * tapholelength/tapholediameter)
-                    a_sc = a_s + (0.5 * densityslag * fds
-                                * tapholelength/tapholediameter)
-                    nvm = (-b_m+math.sqrt(b_m*b_m + 4*pa*a_mc)) / (2*a_mc)
-                    nvs = (-b_s+math.sqrt(b_s*b_s + 4*pa*a_sc)) / (2*a_sc)
-                    converged = abs(nvm-umetal) + abs(nvs-uslag)
-                    umetal, uslag = nvm, nvs
-                
+                umetal, uslag = _solve_velocities(pa, umetal0, uslag0, p)
+
                 # interface deformations
                 h0_l = (-rt - densityslag*uslag*uslag 
                         / (8*g*(densitymetal-densityslag)))
@@ -989,23 +998,32 @@ class DCArcFurnace():
         return umetals, uslags, vdotmetal_outs, vdotslag_outs
 
     def _calc_params(self):
-        """Collect the parameters of the tap-hole flow calculation.
+        """Collect the parameters of the flow calculation for each tap-hole.
 
         The parameters are a snapshot of the current state of the tap-holes, so
-        they can be changed between time steps.
+        they can be changed between time steps. The bath is open, so there is
+        no burden and the pressure drop into a tap-hole is only the entrance
+        loss, and the porosity is 1.
 
         Returns
         -------
-        tuple
-            The parameters of _calc_vdot_out following the phase levels and
-            the initial guesses of the velocities.
+        list of _TapholeParams
+            The parameters of _calc_vdot_out for each tap-hole.
 
         """
-        return (self.tapholediameters, self.tapholelengths,
-                self.tapholeheights, self.tapholeroughnesses, self.entrykls,
-                self.densitymetal, self.densityslag, self.viscositymetal,
-                self.viscosityslag, list(self.tapholesopen_yn),
-                self.allownegativeheights_yn, self.fdmodels)
+        params = []
+        for (diameter, length, height, roughness, entrykl, fdmodel,
+             open_yn) in zip(self.tapholediameters, self.tapholelengths,
+                             self.tapholeheights, self.tapholeroughnesses,
+                             self.entrykls, self.fdmodels,
+                             self.tapholesopen_yn):
+            params.append(_TapholeParams(
+                diameter, length, height, roughness, 1.0, self.densitymetal,
+                self.densityslag, self.viscositymetal, self.viscosityslag,
+                fdmodel, bool(open_yn), self.allownegativeheights_yn,
+                0.5 * (1 + entrykl) * self.densitymetal, 0,
+                0.5 * (1 + entrykl) * self.densityslag, 0))
+        return params
 
     def _calc_rates(self):
         """Calculate the coefficients linking the flows to the rates of change
@@ -1050,7 +1068,7 @@ class DCArcFurnace():
             The metal level and the slag level at the start of the step, m.
         rates : tuple of numpy.ndarray
             The inflows and flows-to-rates matrix from _calc_rates.
-        params : tuple
+        params : list of _TapholeParams
             The parameters from _calc_params.
         velocities : list of list of float
             The metal velocities and the slag velocities in each tap-hole,
@@ -1074,7 +1092,7 @@ class DCArcFurnace():
         def flows(levels):
             umetals, uslags, vdotmetal_outs, vdotslag_outs = (
                 self._calc_vdot_out(levels[0], levels[1], velocities[0],
-                                    velocities[1], *params))
+                                    velocities[1], params))
             velocities[0], velocities[1] = umetals, uslags
             if not start_velocities:
                 start_velocities.extend((umetals, uslags))
