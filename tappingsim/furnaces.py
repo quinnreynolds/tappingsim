@@ -5,8 +5,8 @@ and do so continuously provided the furnace is supplied with power and feed
 material. The molten products are removed from the vessel by tapping through
 one or more tap-holes.
 
-This module also includes support functions for describing flow drag effects in
-packed beds and tap-hole channels.
+The models for the pressure drop through the packed burden and for the friction
+in the tap-hole channel are in the tappingsim.components subpackage.
 """
 
 import math
@@ -16,320 +16,6 @@ import numpy
 from scipy.constants import g, pi
 
 from tappingsim.integrators import rk4_step
-
-
-def bedmodel_kozenycarman(tapholediameter, bedmindiameter, bedmaxdiameter,
-                          bedparticlediameter, bedparticlesphericity,
-                          bedporosity, viscosity, density):
-    """Function to calculate pressure drop through packed burden as flow enters
-    the tap-hole.
-
-    Parameters
-    ----------
-    tapholediameter : float
-        Diameter of tap-hole channel, m.
-    bedmindiameter : float
-        Diameter of cavity in burden in front of tap-hole, m (set to zero
-        for no cavity).
-    bedmaxdiameter : float
-        Extent of burden from tap-hole, m (set to a high value for entire
-        furnace).
-    bedparticlediameter : float
-        Diameter of the constituent particles of the burden layer, m.
-    bedparticlesphericity : float
-        Sphericity of the constituent particles of the burden layer.
-    bedporosity : float
-        Porosity of the burden layer.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    density : float
-        Density of the fluid, kg/m3.
-
-    Returns
-    -------
-    tuple of float
-        A and B constants in pressure drop expression.
-
-    Note
-    ----
-    dP = A*u^2 + B*u, where u is the fluid velocity. The Kozeny-Carman
-    correlation is valid for laminar flow conditions only. [Kozeny1927]_
-    [Carman1937]_
-
-    References
-    ----------
-    .. [Kozeny1927] J. Kozeny. Ueber kapillare Leitung des Wassers im Boden.
-       Sitzungsber Akad. Wiss., Wien, 136(2a): 271-306, 1927.
-    .. [Carman1937] P.C. Carman. Fluid flow through granular beds. Transactions,
-       Institution of Chemical Engineers, London, 15: 150-166, 1937.
-
-    """
-    rt, rmin = 0.5 * tapholediameter, 0.5 * bedmindiameter
-    eff_d = bedparticlediameter * bedparticlesphericity
-    rrmax = rt / (0.5 * bedmaxdiameter)
-    if rmin > rt:
-        rrmin = rt / rmin
-        bconst = (180 * viscosity * rt * (1 - bedporosity) * (1 - bedporosity)
-                  / (2 * eff_d * eff_d * bedporosity * bedporosity * bedporosity)
-                  * (rrmin - rrmax))
-    else:
-        rrmin = rmin / rt
-        bconst = (180 * viscosity * rt * (1 - bedporosity) * (1 - bedporosity)
-                  / (2 * eff_d * eff_d * bedporosity * bedporosity * bedporosity)
-                  * (2 - rrmin - rrmax))
-    return 0, bconst
-
-
-def bedmodel_ergun(tapholediameter, bedmindiameter, bedmaxdiameter,
-                   bedparticlediameter, bedparticlesphericity, bedporosity,
-                   viscosity, density):
-    """Function to calculate pressure drop through packed burden as flow enters
-    the tap-hole.
-
-    Parameters
-    ----------
-    tapholediameter : float
-        Diameter of tap-hole channel, m.
-    bedmindiameter : float
-        Diameter of cavity in burden in front of tap-hole, m (set to zero
-        for no cavity).
-    bedmaxdiameter : float
-        Extent of burden from tap-hole, m (set to a high value for entire
-        furnace).
-    bedparticlediameter : float
-        Diameter of the constituent particles of the burden layer, m.
-    bedparticlesphericity : float
-        Sphericity of the constituent particles of the burden layer.
-    bedporosity : float
-        Porosity of the burden layer.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    density : float
-        Density of the fluid, kg/m3.
-
-    Returns
-    -------
-    tuple of float
-        A and B constants in pressure drop expression.
-
-    Note
-    ----
-    dP = A*u^2 + B*u, where u is the fluid velocity. The Ergun correlation is
-    valid for both laminar and turbulent flow regimes. [Ergun1952]_
-
-    References
-    ----------
-    .. [Ergun1952] S. Ergun. Fluid flow through packed columns. Chem. Eng.
-       Prog. 48: 89-94, 1952.
-    """
-    rt, rmin = 0.5 * tapholediameter, 0.5 * bedmindiameter
-    eff_d = bedparticlediameter * bedparticlesphericity
-    rrmax = rt / (0.5 * bedmaxdiameter)
-    cmult = rt * (1 - bedporosity) / (eff_d * eff_d *
-                                      bedporosity * bedporosity * bedporosity)
-    amult = 0.145833333 * density * eff_d * cmult
-    bmult = 75 * viscosity * (1 - bedporosity) * cmult
-    if rmin > rt:
-        rrmin = rt / rmin
-        aconst = amult * (rrmin * rrmin * rrmin - rrmax * rrmax * rrmax)
-        bconst = bmult * (rrmin - rrmax)
-    else:
-        rrmin = rmin / rt
-        aconst = amult * (4 - 3 * rrmin * rrmin *
-                          rrmin - rrmax * rrmax * rrmax)
-        bconst = bmult * (2 - rrmin - rrmax)
-    return aconst, bconst
-
-
-def fdmodel_bellos(velocity, density, viscosity, diameter, roughness):
-    """Function to calculate the friction factor of fluid flow in the tap-hole
-    channel.
-
-    Parameters
-    ----------
-    velocity : float
-        Velocity of fluid flow in the direction of the channel length, m/s.
-    density : float
-        Density of the fluid, kg/m3.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    diameter : float
-        Diameter of tap-hole channel, m.
-    roughness : float
-        The roughness of the tap-hole channel surface.
-
-    Returns
-    -------
-    float
-        The Darcy friction factor for the tap-hole channel.
-
-    Note
-    ----
-    dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Bellos et al
-    correlation is valid in all flow regimes including transitional flow.
-    [Bellos2018]_ [Bellos2020]_
-
-    References
-    ----------
-    .. [Bellos2018] V. Bellos, I. Nalbantis, G. Tsakiris. Friction Modeling of
-       Flood Flow Simulations. Journal of Hydraulic Engineering, 144(12):
-       04018073, 2018. doi:10.1061/(asce)hy.1943-7900.0001540.
-    .. [Bellos2020] V. Bellos, I. Nalbantis, G. Tsakiris. Erratum for Friction
-       Modeling of Flood Flow Simulations. Journal of Hydraulic Engineering,
-       146(10): 08220005, 2020. doi:10.1061/(ASCE)HY.1943-7900.0001802.
-    """
-    d_over_e = diameter / roughness
-    NRe = diameter * velocity * density / viscosity
-    if NRe < 1:
-        NRe = 1
-    a = 1 / (1 + (0.000368732 * NRe) ** 8.4)
-    b = 1 / (1 + (0.006666667 * NRe / d_over_e) ** 1.8)
-    return ((0.015625 * NRe) ** (-a)
-            * (0.75 * math.log(0.186219739 * NRe)) ** (2 * (a - 1) * b)
-            * (0.88 * math.log(3.41 * d_over_e)) ** (2 * (a - 1) * (1 - b)))
-
-
-def fdmodel_cheng(velocity, density, viscosity, diameter, roughness):
-    """Function to calculate the friction factor of fluid flow in the tap-hole
-    channel.
-
-    Parameters
-    ----------
-    velocity : float
-        Velocity of fluid flow in the direction of the channel length, m/s.
-    density : float
-        Density of the fluid, kg/m3.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    diameter : float
-        Diameter of tap-hole channel, m.
-    roughness : float
-        The roughness of the tap-hole channel surface.
-
-    Returns
-    -------
-    float
-        The Darcy friction factor for the tap-hole channel.
-
-    Note
-    ----
-    dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Cheng
-    correlation is valid in all flow regimes including transitional flow.
-    [Cheng2008]_
-
-    References
-    ----------
-    .. [Cheng2008] N.-S. Cheng. Formulas for Friction Factor in Transitional
-       Regimes. Journal of Hydraulic Engineering. 134(9): 1357-1362, 2008.
-    """
-    d_over_e = diameter / roughness
-    NRe = diameter * velocity * density / viscosity
-    if NRe < 1:
-        NRe = 1
-    a = 1 / (1 + (0.000367647 * NRe) ** 9)
-    b = 1 / (1 + (0.00625 * NRe / d_over_e) ** 2)
-    return ((0.015625 * NRe) ** (-a)
-            * (1.8 * math.log10(0.147058824 * NRe)) ** (2 * (a - 1) * b)
-            * (2.0 * math.log10(3.7 * d_over_e)) ** (2 * (a - 1) * (1 - b)))
-
-
-def fdmodel_serghides1(velocity, density, viscosity, diameter, roughness):
-    """Function to calculate the friction factor of fluid flow in the tap-hole
-    channel.
-
-    Parameters
-    ----------
-    velocity : float
-        Velocity of fluid flow in the direction of the channel length, m/s.
-    density : float
-        Density of the fluid, kg/m3.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    diameter : float
-        Diameter of tap-hole channel, m.
-    roughness : float
-        The roughness of the tap-hole channel surface.
-
-    Returns
-    -------
-    float
-        The Darcy friction factor for the tap-hole channel.
-
-    Note
-    ----
-    dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides
-    correlation is valid for laminar and turbulent flow regimes. [Serghides1984]_
-
-    References
-    ----------
-    .. [Serghides1984] T.K. Serghides. Estimate friction factor accurately.
-       Chemical Engineering Journal. 91(5): 63-64, 1984.
-    """
-    if velocity < 1e-6:
-        return 64
-    e_over_d = roughness / diameter
-    invNRe = viscosity / (diameter * velocity * density)
-    if invNRe > 1:
-        return 64
-    elif invNRe > 0.000333333:
-        return 64 * invNRe
-    else:
-        eod = 0.27027027 * e_over_d
-        psi1 = -2 * math.log10(eod + 12 * invNRe)
-        psi2 = -2 * math.log10(eod + 2.51 * psi1 * invNRe)
-        psi3 = -2 * math.log10(eod + 2.51 * psi2 * invNRe)
-        invsqrtf = psi1 - (psi2 - psi1) * (psi2 - psi1) / \
-            (psi3 - 2 * psi2 + psi1)
-        return 1 / (invsqrtf * invsqrtf)
-
-
-def fdmodel_serghides2(velocity, density, viscosity, diameter, roughness):
-    """Function to calculate the friction factor of fluid flow in the tap-hole
-    channel.
-
-    Parameters
-    ----------
-    velocity : float
-        Velocity of fluid flow in the direction of the channel length, m/s.
-    density : float
-        Density of the fluid, kg/m3.
-    viscosity : float
-        Viscosity of the fluid, Pa.s.
-    diameter : float
-        Diameter of tap-hole channel, m.
-    roughness : float
-        The roughness of the tap-hole channel surface.
-
-    Returns
-    -------
-    float
-        The Darcy friction factor for the tap-hole channel.
-
-    Note
-    ----
-    dP/L = f*(rho*u^2)/(2*D), where u is the fluid velocity. The Serghides
-    correlation is valid laminar and turbulent flow regimes. [Serghides1984b]_
-
-    References
-    ----------
-    .. [Serghides1984b] T.K. Serghides. Estimate friction factor accurately.
-       Chemical Engineering Journal. 91(5): 63-64, 1984.
-    """
-    if velocity < 1e-6:
-        return 64
-    e_over_d = roughness / diameter
-    invNRe = viscosity / (diameter * velocity * density)
-    if invNRe > 1:
-        return 64
-    elif invNRe > 0.000333333:
-        return 64 * invNRe
-    else:
-        eod = 0.27027027 * e_over_d
-        psi1 = -2 * math.log10(eod + 12 * invNRe)
-        psi2 = -2 * math.log10(eod + 2.51 * psi1 * invNRe)
-        invsqrtf = 4.781 - (psi1 - 4.781) * (psi1 - 4.781) / \
-            (psi2 - 2 * psi1 + 4.781)
-        return 1 / (invsqrtf * invsqrtf)
 
 
 # Convergence tolerance of the iteration for the tap-hole velocities, as the
@@ -675,12 +361,12 @@ class SubmergedArcFurnace():
         furnace).
     bedmodel : callable
         Function to be used to model the pressure drop through the burden
-        section.
+        section (see tappingsim.components.bedmodels).
     entrykl : float
         Pressure loss coefficient to account for tap-hole entrance effects.
     fdmodel : callable
         Function to be used to model the pressure drop through the tap-hole
-        channel.
+        channel (see tappingsim.components.fdmodels).
     hmetal_init : float
         The initial level of metal in the furnace, m.
     hslag_init : float
@@ -733,12 +419,12 @@ class SubmergedArcFurnace():
         furnace).
     bedmodel : callable
         Function to be used to model the pressure drop through the burden
-        section.
+        section (see tappingsim.components.bedmodels).
     entrykl : float
         Pressure loss coefficient to account for tap-hole entrance effects.
     fdmodel : callable
         Function to be used to model the pressure drop through the tap-hole
-        channel.
+        channel (see tappingsim.components.fdmodels).
     hmetal : float
         The current level of metal in the furnace, m.
     hslag : float

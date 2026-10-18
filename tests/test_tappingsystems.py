@@ -2,7 +2,9 @@
 
 import numpy
 import pytest
-from tappingsim.furnaces import SubmergedArcFurnace, bedmodel_ergun, fdmodel_cheng
+from tappingsim.components.bedmodels import bedmodel_ergun
+from tappingsim.components.fdmodels import fdmodel_cheng
+from tappingsim.furnaces import SubmergedArcFurnace
 from tappingsim.ladles import CylindricalLadle
 from tappingsim.outlets import overflowmodel_step
 from tappingsim.launders import SimpleSisoLaunder

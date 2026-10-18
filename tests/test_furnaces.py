@@ -5,15 +5,9 @@ import numpy
 import pytest
 from scipy.constants import g
 from tappingsim import furnaces
-from tappingsim.furnaces import (
-    SubmergedArcFurnace,
-    bedmodel_ergun,
-    bedmodel_kozenycarman,
-    fdmodel_bellos,
-    fdmodel_cheng,
-    fdmodel_serghides1,
-    fdmodel_serghides2,
-)
+from tappingsim.components.bedmodels import bedmodel_ergun
+from tappingsim.components.fdmodels import fdmodel_cheng
+from tappingsim.furnaces import SubmergedArcFurnace
 
 
 # ---------------------------------------------------------------------------
@@ -53,108 +47,6 @@ def furnace_params():
 @pytest.fixture
 def furnace(furnace_params):
     return SubmergedArcFurnace(**furnace_params)
-
-
-# ---------------------------------------------------------------------------
-# Bed pressure drop models
-# ---------------------------------------------------------------------------
-
-class TestBedmodelKozenyCarman:
-    def test_returns_zero_a_const(self):
-        """Kozeny-Carman is laminar-only so the quadratic A term is always 0."""
-        a, b = bedmodel_kozenycarman(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert a == 0
-
-    def test_b_const_positive(self):
-        a, b = bedmodel_kozenycarman(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert b > 0
-
-    def test_b_const_value(self):
-        a, b = bedmodel_kozenycarman(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert b == pytest.approx(1740.234375, rel=1e-6)
-
-    def test_cavity_larger_than_taphole(self):
-        """When bedmindiameter > tapholediameter a different branch is taken."""
-        a, b = bedmodel_kozenycarman(0.1, 0.05, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert a == 0
-        assert b > 0
-
-
-class TestBedmodelErgun:
-    def test_both_consts_positive(self):
-        a, b = bedmodel_ergun(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert a > 0
-        assert b > 0
-
-    def test_a_const_value(self):
-        a, b = bedmodel_ergun(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert a == pytest.approx(683.593065, rel=1e-5)
-
-    def test_b_const_value(self):
-        a, b = bedmodel_ergun(0.1, 0.2, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert b == pytest.approx(1450.195313, rel=1e-5)
-
-    def test_cavity_larger_than_taphole(self):
-        a, b = bedmodel_ergun(0.1, 0.05, 20, 0.02, 0.8, 0.5, 0.1, 3000)
-        assert a > 0
-        assert b > 0
-
-
-# ---------------------------------------------------------------------------
-# Friction factor models
-# ---------------------------------------------------------------------------
-
-class TestFdmodelBellos:
-    def test_positive(self):
-        assert fdmodel_bellos(1.0, 7000, 0.005, 0.1, 1e-3) > 0
-
-    def test_value(self):
-        f = fdmodel_bellos(1.0, 7000, 0.005, 0.1, 1e-3)
-        assert f == pytest.approx(0.037441389, rel=1e-5)
-
-    def test_low_velocity_clamp(self):
-        """Near-zero velocity should not raise and should return a finite value."""
-        f = fdmodel_bellos(1e-10, 7000, 0.005, 0.1, 1e-3)
-        assert math.isfinite(f)
-        assert f > 0
-
-
-class TestFdmodelCheng:
-    def test_positive(self):
-        assert fdmodel_cheng(1.0, 7000, 0.005, 0.1, 1e-3) > 0
-
-    def test_value(self):
-        f = fdmodel_cheng(1.0, 7000, 0.005, 0.1, 1e-3)
-        assert f == pytest.approx(0.037501995, rel=1e-5)
-
-
-class TestFdmodelSerghides1:
-    def test_positive(self):
-        assert fdmodel_serghides1(1.0, 7000, 0.005, 0.1, 1e-3) > 0
-
-    def test_value(self):
-        f = fdmodel_serghides1(1.0, 7000, 0.005, 0.1, 1e-3)
-        assert f == pytest.approx(0.038334483, rel=1e-5)
-
-    def test_zero_velocity_returns_laminar(self):
-        assert fdmodel_serghides1(0.0, 7000, 0.005, 0.1, 1e-3) == 64
-
-    def test_laminar_regime(self):
-        """Very low Re should return the laminar value f = 64/Re."""
-        f = fdmodel_serghides1(1e-4, 1000, 0.001, 0.01, 1e-5)
-        assert f > 0
-
-
-class TestFdmodelSerghides2:
-    def test_positive(self):
-        assert fdmodel_serghides2(1.0, 7000, 0.005, 0.1, 1e-3) > 0
-
-    def test_value(self):
-        f = fdmodel_serghides2(1.0, 7000, 0.005, 0.1, 1e-3)
-        assert f == pytest.approx(0.038334483, rel=1e-5)
-
-    def test_zero_velocity_returns_laminar(self):
-        assert fdmodel_serghides2(0.0, 7000, 0.005, 0.1, 1e-3) == 64
 
 
 # ---------------------------------------------------------------------------
