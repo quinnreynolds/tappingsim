@@ -22,8 +22,8 @@ The core models are:
   (Bellos, Cheng, or Serghides) correlations to compute volumetric outflow.
 - **Launders**: pass-through and two-tank skimmer models routing flow from the furnace taphole
   to ladles.
-- **Ladles**: cylindrical vessels that accumulate metal and slag, and overflow through an
-  open-channel outlet.
+- **Ladles**: cylindrical vessels and tapered rectangular pans that accumulate metal and slag,
+  and overflow through an open-channel outlet.
 - **Components** (``tappingsim.components``): the shared parts from which the models are built
   and configured: the burden pressure-drop and friction-factor models, the open-channel flow over
   overflow outlets with models for metal entrained in the slag overflow, and the time integration

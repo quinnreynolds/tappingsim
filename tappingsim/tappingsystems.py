@@ -126,7 +126,10 @@ class SAFWithLadles():
         the metal and slag flowrates out of the launder into the first ladle,
         as these are read by the calc_dt method.
     ladles: list of object
-        A list of instances of the CylindricalLadle class or equivalent.
+        A list of instances of the CylindricalLadle class or equivalent. The
+        ladle objects must have a diameter attribute, the internal diameter of
+        the ladle, as this is read by the ladle_masses method, so ladles of
+        other shapes, such as the PanLadle class, cannot be used here.
 
     Attributes
     ----------
@@ -447,7 +450,11 @@ class DCAFWithLadles(DCAF):
         furnace tap-holes. Each entry is a list of instances of the
         CylindricalLadle class or equivalent, filled in series from the
         launder, or an empty list for a tap-hole with no ladles. A launder or
-        a ladle can belong to only one tap-hole.
+        a ladle can belong to only one tap-hole. The ladle objects must have a
+        diameter attribute, the internal diameter of the ladle, and an outlet
+        attribute with the phase densities, as these are read by the
+        ladle_masses method, so ladles of other shapes, such as the PanLadle
+        class, cannot be used here.
 
     Attributes
     ----------
