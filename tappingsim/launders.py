@@ -128,6 +128,10 @@ class SkimmerLaunder:
     metal_trough_overflowmodel : function, optional
         Function to be used to model the entrainment of metal in the slag flowing out of the
         metal trough outlet, as for the slag trough. The default is no entrainment.
+    weir_underflow_kl : float, optional
+        Pressure loss coefficient for the entrance to the weir underflow channel, as a
+        multiple of the velocity head of each phase in the channel, dimensionless. It is zero
+        for lossless inflow, which is the default.
 
     Attributes
     ----------
@@ -143,6 +147,8 @@ class SkimmerLaunder:
         The height of the underflow channel under the weir, m.
     weir_underflow_width : float
         The width of the underflow channel under the weir, m.
+    weir_underflow_kl : float
+        The pressure loss coefficient for the entrance to the underflow channel.
     metal_trough_length : float
         The internal length of the post-weir (metal) trough, m.
     metal_trough_upper_width : float
@@ -186,7 +192,9 @@ class SkimmerLaunder:
     ----
     Both troughs are initially empty. Material enters the slag trough, and flows to the metal
     trough through the underflow channel under the weir, driven by the difference in
-    hydrostatic pressure between the two troughs. Each trough drains through its own
+    hydrostatic pressure between the two troughs, which is balanced by the velocity head of
+    each phase in the channel and by the entrance loss, K_L times the velocity head (see
+    weir_underflow_kl). Each trough drains through its own
     open-channel overflow outlet, which is modelled as a broad-crested weir with flowrate
     proportional to the overflow head to the power 3/2. Metal entrained in the slag flowing
     out of each outlet is described by an overflow model, as for the ladle classes. With the
@@ -248,15 +256,20 @@ class SkimmerLaunder:
         # entrainment of metal in the slag overflow from each trough
         slag_trough_overflowmodel=overflowmodel_step,
         metal_trough_overflowmodel=overflowmodel_step,
+        # pressure loss at the entrance to the weir underflow channel
+        weir_underflow_kl=0.0,
     ):
         if max_substep <= 0:
             raise ValueError("max_substep must be positive")
+        if weir_underflow_kl < 0:
+            raise ValueError("weir_underflow_kl must not be negative")
         self.slag_trough_length = slag_trough_length
         self.slag_trough_upper_width = slag_trough_upper_width
         self.slag_trough_lower_width = slag_trough_lower_width
         self.slag_trough_height = slag_trough_height
         self.weir_underflow_height = weir_underflow_height
         self.weir_underflow_width = weir_underflow_width
+        self.weir_underflow_kl = weir_underflow_kl
         self.metal_trough_length = metal_trough_length
         self.metal_trough_upper_width = metal_trough_upper_width
         self.metal_trough_lower_width = metal_trough_lower_width
@@ -421,7 +434,9 @@ class SkimmerLaunder:
         channel for the given levels.
 
         The flowrates are calculated from the hydrostatic pressure difference between the
-        troughs, using the Bernoulli equation for the velocity of each phase. Depending on
+        troughs, using the Bernoulli equation for the velocity of each phase, with a loss
+        of K_L times the velocity head at the entrance to the channel, so that the pressure
+        difference is 0.5 * (1 + K_L) * density * velocity**2. Depending on
         the position of the slag-metal interface and the free surface relative to the top of
         the underflow channel, the channel is filled by metal, by metal and slag, or only
         partially filled. The phase proportions in the channel are those of the trough the
@@ -449,14 +464,18 @@ class SkimmerLaunder:
         # Assumptions and conventions:
         #  - Positive flow direction is from slag section to metal section
         #  - No deformation of slag-metal interface at weir inflow
+        #  - The same entrance loss coefficient applies to flow in either direction
         #  - The phase proportions in the underflow channel are those of the trough the flow
         #    comes from
         A_w = self.weir_underflow_height * self.weir_underflow_width
         P_ss = hm_ss * self.density_metal * g + (hs_ss - hm_ss) * self.density_slag * g
         P_ms = hm_ms * self.density_metal * g + (hs_ms - hm_ms) * self.density_slag * g
         deltaP = P_ss - P_ms
-        u_mw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_metal)
-        u_sw = numpy.sign(deltaP) * numpy.sqrt(2 * numpy.abs(deltaP) / self.density_slag)
+        loss_factor = 1 + self.weir_underflow_kl
+        u_mw = numpy.sign(deltaP) * numpy.sqrt(
+            2 * numpy.abs(deltaP) / (loss_factor * self.density_metal))
+        u_sw = numpy.sign(deltaP) * numpy.sqrt(
+            2 * numpy.abs(deltaP) / (loss_factor * self.density_slag))
         # levels in the trough the flow comes from
         hm, hs = (hm_ss, hs_ss) if deltaP >= 0 else (hm_ms, hs_ms)
         # slag-metal interface is above weir underflow channel

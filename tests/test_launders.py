@@ -525,9 +525,10 @@ class TestSkimmerLaunderWeirFlow:
 
     area = 0.3 * 0.3
 
-    def expected_flows(self, source_hmetal, source_hslag, deltaP):
+    def expected_flows(self, source_hmetal, source_hslag, deltaP, kl=0.0):
         """Metal and slag flowrates, with the phase proportions of the channel taken from the
-        trough the flow comes from, and the sign of the pressure difference."""
+        trough the flow comes from, and the sign of the pressure difference, for an entrance
+        loss of kl velocity heads."""
         height = 0.3
         if source_hmetal > height:
             metal_fraction, slag_fraction = 1.0, 0.0
@@ -538,8 +539,10 @@ class TestSkimmerLaunderWeirFlow:
             slag_fraction = (source_hslag - source_hmetal) / height
         sign = numpy.sign(deltaP)
         return (
-            metal_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_METAL),
-            slag_fraction * self.area * sign * numpy.sqrt(2 * abs(deltaP) / RHO_SLAG),
+            metal_fraction * self.area * sign
+            * numpy.sqrt(2 * abs(deltaP) / ((1 + kl) * RHO_METAL)),
+            slag_fraction * self.area * sign
+            * numpy.sqrt(2 * abs(deltaP) / ((1 + kl) * RHO_SLAG)),
         )
 
     @staticmethod
@@ -593,6 +596,73 @@ class TestSkimmerLaunderWeirFlow:
         vdot_metal, vdot_slag = skimmer._calc_vdot_weir(*levels)
         assert vdot_metal < 0
         assert vdot_slag == 0
+
+
+class TestSkimmerLaunderWeirEntryLoss:
+    """The loss of kl velocity heads at the entrance to the weir underflow channel."""
+
+    helper = TestSkimmerLaunderWeirFlow()
+
+    # the interface above the top of the channel, below it, and the slag surface below it
+    sources = TestSkimmerLaunderWeirFlow.sources
+    receivers = TestSkimmerLaunderWeirFlow.receivers
+
+    def test_default_is_lossless(self, skimmer):
+        assert skimmer.weir_underflow_kl == 0.0
+
+    def test_loss_coefficient_stored(self):
+        assert make_skimmer(weir_underflow_kl=0.5).weir_underflow_kl == 0.5
+
+    def test_negative_loss_coefficient_rejected(self):
+        with pytest.raises(ValueError, match="weir_underflow_kl"):
+            make_skimmer(weir_underflow_kl=-0.1)
+
+    def test_explicit_zero_is_the_same_as_the_default(self):
+        explicit, default = make_skimmer(weir_underflow_kl=0), make_skimmer()
+        levels = (0.4, 0.5, 0.05, 0.06)
+        assert explicit._calc_vdot_weir(*levels) == default._calc_vdot_weir(*levels)
+
+    @pytest.mark.parametrize("kl", [0.25, 1.0, 4.0])
+    @pytest.mark.parametrize("source", sources)
+    def test_flows_match_the_bernoulli_equation_with_the_loss(self, source, kl):
+        skimmer = make_skimmer(weir_underflow_kl=kl)
+        levels = (*source, *self.receivers[0])
+        deltaP = self.helper.pressure_difference(*levels)
+        expected = self.helper.expected_flows(*source, deltaP, kl)
+        assert skimmer._calc_vdot_weir(*levels) == pytest.approx(expected, rel=1e-12)
+
+    @pytest.mark.parametrize("kl", [0.25, 1.0, 4.0])
+    def test_flows_are_reduced_by_the_root_of_one_plus_kl(self, kl):
+        lossy, lossless = make_skimmer(weir_underflow_kl=kl), make_skimmer()
+        for source in self.sources:
+            for receiver in self.receivers:
+                lossy_flows = lossy._calc_vdot_weir(*source, *receiver)
+                lossless_flows = lossless._calc_vdot_weir(*source, *receiver)
+                assert lossy_flows == pytest.approx(
+                    tuple(q / numpy.sqrt(1 + kl) for q in lossless_flows), rel=1e-12, abs=1e-15)
+
+    def test_loss_applies_to_reversed_flow(self):
+        skimmer = make_skimmer(weir_underflow_kl=1.0)
+        for source in self.sources:
+            for receiver in self.receivers:
+                forward = skimmer._calc_vdot_weir(*source, *receiver)
+                reverse = skimmer._calc_vdot_weir(*receiver, *source)
+                assert reverse == pytest.approx((-forward[0], -forward[1]), rel=1e-12, abs=1e-15)
+
+    def test_no_flow_when_pressures_are_equal(self):
+        skimmer = make_skimmer(weir_underflow_kl=2.0)
+        assert skimmer._calc_vdot_weir(0.2, 0.28, 0.2, 0.28) == (0, 0)
+
+    def test_loss_holds_more_metal_in_the_slag_trough(self):
+        """The same supply passes through a less permeable channel at a larger level
+        difference, with nothing lost over the outlets."""
+        lossless, lossy = make_skimmer(), make_skimmer(weir_underflow_kl=4.0)
+        for skimmer in (lossless, lossy):
+            for _ in range(60):
+                skimmer.calc_dt(1.0, 0.003, 0.004)
+            assert total_volumes(skimmer) == pytest.approx((60 * 0.003, 60 * 0.004), rel=1e-9)
+        assert lossy.slag_trough_hmetal > lossless.slag_trough_hmetal
+        assert lossy.metal_trough_hmetal < lossless.metal_trough_hmetal
 
 
 class TestSkimmerLaunderPhysicalVolumes:
